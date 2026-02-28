@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.whatsapp-bot-session/
+*.log
+.gemini-whatsapp-bot-config.json
+.env
