@@ -1,0 +1,28 @@
+'use strict';
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('BotManager', {
+    // Local config store
+    store: {
+        get: (key) => ipcRenderer.invoke('store:get', key),
+        set: (key, value) => ipcRenderer.invoke('store:set', key, value),
+        getAll: () => ipcRenderer.invoke('store:getAll'),
+    },
+    // SSH operations
+    ssh: {
+        test: () => ipcRenderer.invoke('ssh:test'),
+    },
+    // VPS operations
+    vps: {
+        status: () => ipcRenderer.invoke('vps:status'),
+        restart: () => ipcRenderer.invoke('vps:restart'),
+        backup: () => ipcRenderer.invoke('vps:backup'),
+        logs: (lines) => ipcRenderer.invoke('vps:logs', lines),
+        setEnv: (vars) => ipcRenderer.invoke('vps:setEnv', vars),
+    },
+    // Bot config
+    bot: {
+        readConfig: () => ipcRenderer.invoke('bot:readConfig'),
+        saveConfig: (patch) => ipcRenderer.invoke('bot:saveConfig', patch),
+    },
+});
