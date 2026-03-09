@@ -430,17 +430,22 @@ document.getElementById('btn-gdrive-logout')?.addEventListener('click', async ()
 document.getElementById('btn-gdrive-upload')?.addEventListener('click', async () => {
     const folderId = document.getElementById('gdrive-folder-id').value.trim() || undefined;
     showLoading('btn-gdrive-upload', '⏳ Uploading...');
-    setOutput('backup-drive-output', '📥 Downloading backup from VPS via SFTP…', '');
+    const folderMsg = folderId
+        ? `🔍 Resolving folder "${folderId}"…`
+        : '📥 Downloading backup from VPS via SFTP…';
+    setOutput('backup-drive-output', folderMsg, '');
     const result = await BM.gdrive.uploadBackup({ folderId });
     stopLoading('btn-gdrive-upload');
     if (result.ok) {
-        setOutput('backup-drive-output', `✅ Uploaded to Google Drive!\n📄 File: ${result.driveFileName}\n🆔 Drive ID: ${result.driveFileId}`, 'success');
+        const folderNote = result.folderResolved ? `\n📂 Folder ID resolved: ${result.folderResolved}` : '';
+        setOutput('backup-drive-output', `✅ Uploaded to Google Drive!\n📄 File: ${result.driveFileName}\n🆔 Drive ID: ${result.driveFileId}${folderNote}`, 'success');
         toast(`✅ Backup uploaded to Google Drive`, 'success');
     } else {
         setOutput('backup-drive-output', '❌ Upload failed: ' + result.error, 'error');
         toast('❌ Upload failed: ' + result.error, 'error');
     }
 });
+
 
 
 // ═══════════════════════════════════════════════════════════

@@ -565,46 +565,96 @@ ipcMain.handle('gdrive:logout', () => {
     return { ok: true };
 });
 
+/**
+ * Resolve a folder name or ID to a Drive folder ID.
+ * - If input looks like a real Drive ID (alphanumeric, 25-50 chars, no spaces) → use as-is.
+ * - Otherwise → search Drive for a folder with that exact name and return its ID.
+ * - If nothing found → throw an informative error.
+ */
+function resolveFolderId(accessToken, folderInput) {
+    // Heuristic: Drive IDs are 25–50 chars, alphanumeric + _ + -
+    if (!folderInput) return Promise.resolve(null);
+    const looksLikeId = /^[a-zA-Z0-9_\-]{25,}$/.test(folderInput);
+    if (looksLikeId) return Promise.resolve(folderInput);
+
+    // Search by name
+    return new Promise((resolve, reject) => {
+        const query = encodeURIComponent(`name='${folderInput.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+        https.get({
+            hostname: 'www.googleapis.com',
+            path: `/drive/v3/files?q=${query}&fields=files(id,name)&pageSize=5`,
+            headers: { Authorization: `Bearer ${accessToken}` },
+        }, (res) => {
+            const chunks = [];
+            res.on('data', c => chunks.push(c));
+            res.on('end', () => {
+                try {
+                    const result = JSON.parse(Buffer.concat(chunks).toString());
+                    if (result.error) return reject(new Error(result.error.message || 'Drive folder search failed'));
+                    const files = result.files || [];
+                    if (files.length === 0) return reject(new Error(`Folder "${folderInput}" not found in Google Drive. Enter the folder ID from the Drive URL instead of the folder name.`));
+                    // Use the first match
+                    resolve(files[0].id);
+                } catch (e) { reject(e); }
+            });
+        }).on('error', reject);
+    });
+}
+
 // ────────────────────────────────────────────────────────────
 // IPC: Upload latest VPS backup to Google Drive
 // Downloads from VPS via SFTP → uploads to Drive
 // ────────────────────────────────────────────────────────────
 ipcMain.handle('gdrive:uploadBackup', async (_e, { folderId } = {}) => {
-    const { botDir } = getVpsConfig();
     try {
         // 1. Get valid Drive token
         const accessToken = await getValidToken();
 
-        // 2. Find latest backup on VPS
+        // 2. Resolve folder name → ID (handles both names and real IDs)
+        let resolvedFolderId = null;
+        if (folderId && folderId.trim()) {
+            resolvedFolderId = await resolveFolderId(accessToken, folderId.trim());
+        }
+
+        // 3. Find latest backup on VPS
         const latestFile = await sshExec(`ls -t /root/whatsapp-bot-backup-*.tar.gz 2>/dev/null | head -1`);
-        if (!latestFile || latestFile.includes('[ERR]')) throw new Error('No backup found on VPS. Take a backup first.');
+        if (!latestFile || !latestFile.trim() || latestFile.includes('[ERR]')) {
+            throw new Error('No backup file found on VPS. Click "Take Backup Now" first.');
+        }
         const remoteFile = latestFile.trim();
         const filename = path.basename(remoteFile);
 
-        // 3. Download from VPS via SFTP
+        // 4. Download from VPS via SFTP
         const localPath = path.join(os.tmpdir(), filename);
         await new Promise((resolve, reject) => {
             const cfg = getVpsConfig();
             const conn = new SshClient();
             conn.on('ready', () => {
                 conn.sftp((err, sftp) => {
-                    if (err) { conn.end(); return reject(err); }
+                    if (err) { conn.end(); return reject(new Error('SFTP session failed: ' + err.message)); }
                     sftp.fastGet(remoteFile, localPath, (err) => {
                         conn.end();
-                        if (err) reject(err); else resolve();
+                        if (err) reject(new Error('SFTP download failed: ' + err.message));
+                        else resolve();
                     });
                 });
-            }).on('error', reject)
+            }).on('error', e => reject(new Error('SSH connection failed: ' + e.message)))
                 .connect({ host: cfg.host, port: cfg.port, username: cfg.username, password: cfg.password, readyTimeout: 15000 });
         });
 
-        // 4. Upload to Google Drive
-        const driveFile = await uploadToDrive(accessToken, filename, localPath, folderId || null);
+        // 5. Upload to Google Drive
+        const driveFile = await uploadToDrive(accessToken, filename, localPath, resolvedFolderId);
 
-        // 5. Clean up local temp file
+        // 6. Clean up local temp file
         try { fs.unlinkSync(localPath); } catch { }
 
-        return { ok: true, filename, driveFileId: driveFile.id, driveFileName: driveFile.name };
+        return {
+            ok: true,
+            filename,
+            driveFileId: driveFile.id,
+            driveFileName: driveFile.name,
+            folderResolved: resolvedFolderId,
+        };
     } catch (e) {
         return { ok: false, error: e.message };
     }
