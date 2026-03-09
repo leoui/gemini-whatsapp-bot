@@ -369,24 +369,39 @@ print('OK')
 // ────────────────────────────────────────────────────────────
 
 // Update systemd env var (GEMINI_API_KEY, GROQ_API_KEY, etc.)
+// Uses base64 encoding to safely handle arbitrarily long values
+// (e.g. 7+ Gemini keys as a comma-separated string).
 ipcMain.handle('vps:setEnv', async (_e, envVars) => {
     const { serviceName } = getVpsConfig();
     try {
-        // Build python one-liner to update specific env lines
-        const updates = Object.entries(envVars);
-        let pyScript = `import re; f='/etc/systemd/system/${serviceName}.service'; c=open(f).read();\n`;
-        for (const [k, v] of updates) {
-            const escaped = v.replace(/'/g, "\\'");
-            pyScript += `c=re.sub(r'Environment=${k}=.*', "Environment=${k}=${escaped}", c); c=c if 'Environment=${k}=' in c else c.replace('[Service]\\n', '[Service]\\nEnvironment=${k}=${escaped}\\n');\n`;
-        }
-        pyScript += `open(f,'w').write(c); print('OK')`;
+        // Encode the update dict as base64 JSON — avoids all shell escaping issues
+        const b64 = Buffer.from(JSON.stringify({ serviceName, envVars })).toString('base64');
+
+        // Python script that decodes the payload and patches the service file
+        const pyCode = [
+            'import re, json, base64, sys',
+            `payload = json.loads(base64.b64decode('${b64}').decode('utf-8'))`,
+            'svc = payload["serviceName"]',
+            'updates = payload["envVars"]',
+            'f = f"/etc/systemd/system/{svc}.service"',
+            'c = open(f).read()',
+            'for k, v in updates.items():',
+            '    pattern = rf"Environment={k}=.*"',
+            '    replacement = f"Environment={k}={v}"',
+            '    if re.search(pattern, c):',
+            '        c = re.sub(pattern, replacement, c)',
+            '    else:',
+            '        c = c.replace("[Service]\\n", f"[Service]\\nEnvironment={k}={v}\\n", 1)',
+            'open(f, "w").write(c)',
+            'print("OK")',
+        ].join('; ');
 
         await sshExec([
-            `python3 -c "${pyScript.replace(/\n/g, ' ')}"`,
+            `python3 -c "${pyCode}"`,
             'systemctl daemon-reload',
-            'systemctl restart whatsapp-bot',
+            `systemctl restart ${serviceName}`,
             'sleep 2',
-            'systemctl is-active whatsapp-bot',
+            `systemctl is-active ${serviceName}`,
         ]);
         return { ok: true };
     } catch (e) {

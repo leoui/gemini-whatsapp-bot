@@ -493,6 +493,42 @@ button.small {
   font-size: 12px;
 }
 
+/* ===== GEMINI KEY ROWS ===== */
+.key-rows-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.key-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.key-row input {
+  flex: 1;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.key-row .btn-remove-key {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.key-row .btn-remove-key:hover {
+  background: rgba(220, 38, 38, 0.15);
+  color: #f87171;
+}
+
 .hidden {
   display: none !important;
 }

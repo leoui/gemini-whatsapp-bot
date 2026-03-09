@@ -159,15 +159,59 @@ document.getElementById('btn-save-persona')?.addEventListener('click', async () 
 });
 
 // ═══════════════════════════════════════════════════════════
-// PANEL: API Keys
+// PANEL: API Keys — Dynamic Gemini key rows (unlimited)
 // ═══════════════════════════════════════════════════════════
+
+function addGeminiKeyRow(value = '') {
+    const list = document.getElementById('gemini-keys-list');
+    if (!list) return;
+    const row = document.createElement('div');
+    row.className = 'key-row';
+    row.innerHTML = `
+        <input type="password" placeholder="AIza..." value="${value.replace(/"/g, '&quot;')}" autocomplete="off" spellcheck="false" />
+        <button class="btn-remove-key" title="Remove this key">✕</button>
+    `;
+    row.querySelector('.btn-remove-key').addEventListener('click', () => {
+        row.remove();
+        // Always keep at least one row
+        if (!document.querySelector('#gemini-keys-list .key-row')) addGeminiKeyRow();
+    });
+    list.appendChild(row);
+}
+
+function getGeminiKeys() {
+    return [...document.querySelectorAll('#gemini-keys-list .key-row input')]
+        .map(i => i.value.trim())
+        .filter(Boolean)
+        .join(',');
+}
+
+function populateGeminiKeys(csvOrArray) {
+    const list = document.getElementById('gemini-keys-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const keys = Array.isArray(csvOrArray)
+        ? csvOrArray
+        : (csvOrArray || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (keys.length === 0) { addGeminiKeyRow(); return; }
+    keys.forEach(k => addGeminiKeyRow(k));
+}
+
+// Initialize with one empty row on page load
+document.addEventListener('DOMContentLoaded', () => {
+    addGeminiKeyRow();
+});
+
+// Add Key button
+document.getElementById('btn-add-gemini-key')?.addEventListener('click', () => addGeminiKeyRow());
+
 document.getElementById('btn-load-apikeys')?.addEventListener('click', async () => {
     showLoading('btn-load-apikeys', 'Loading...');
     const result = await BM.bot.readConfig();
     stopLoading('btn-load-apikeys');
     if (result.ok) {
         const env = result.envVars;
-        document.getElementById('key-gemini').value = env['GEMINI_API_KEY'] || '';
+        populateGeminiKeys(env['GEMINI_API_KEY'] || '');
         document.getElementById('key-groq').value = env['GROQ_API_KEY'] || '';
         document.getElementById('key-pollinations').value = env['POLLINATIONS_API_KEY'] || '';
         setOutput('apikeys-output', '✅ Loaded from VPS service file', 'success');
@@ -178,11 +222,12 @@ document.getElementById('btn-load-apikeys')?.addEventListener('click', async () 
 });
 
 document.getElementById('btn-save-apikeys')?.addEventListener('click', async () => {
-    const gemini = document.getElementById('key-gemini').value.trim();
+    const gemini = getGeminiKeys();
     const groq = document.getElementById('key-groq').value.trim();
     const poll = document.getElementById('key-pollinations').value.trim();
-    if (!gemini) { toast('⚠️ Gemini API key is required', 'error'); return; }
+    if (!gemini) { toast('⚠️ At least one Gemini API key is required', 'error'); return; }
 
+    const keyCount = gemini.split(',').length;
     const envVars = { GEMINI_API_KEY: gemini };
     if (groq) envVars['GROQ_API_KEY'] = groq;
     if (poll) envVars['POLLINATIONS_API_KEY'] = poll;
@@ -191,8 +236,8 @@ document.getElementById('btn-save-apikeys')?.addEventListener('click', async () 
     const result = await BM.vps.setEnv(envVars);
     stopLoading('btn-save-apikeys');
     if (result.ok) {
-        setOutput('apikeys-output', '✅ Keys written to systemd and bot restarted', 'success');
-        toast('✅ API keys updated — bot restarted', 'success');
+        setOutput('apikeys-output', `✅ ${keyCount} Gemini key(s) saved to VPS, bot restarted`, 'success');
+        toast(`✅ ${keyCount} API key(s) saved — bot restarted`, 'success');
     } else {
         setOutput('apikeys-output', '❌ ' + result.error, 'error');
     }
@@ -749,7 +794,7 @@ function applyImportedConfig(result) {
     const { envVars = {}, botConfig = {}, meta = {} } = result;
 
     // --- API Keys panel ---
-    if (envVars['GEMINI_API_KEY']) document.getElementById('key-gemini').value = envVars['GEMINI_API_KEY'];
+    if (envVars['GEMINI_API_KEY']) populateGeminiKeys(envVars['GEMINI_API_KEY']);
     if (envVars['GROQ_API_KEY']) document.getElementById('key-groq').value = envVars['GROQ_API_KEY'];
     if (envVars['POLLINATIONS_API_KEY']) document.getElementById('key-pollinations').value = envVars['POLLINATIONS_API_KEY'];
 

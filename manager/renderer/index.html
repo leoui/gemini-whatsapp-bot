@@ -186,9 +186,10 @@
           <div class="card">
             <div class="field">
               <label>🤖 Gemini API Keys</label>
-              <p class="field-help">Comma-separated keys for rotation. Free at <a href="https://aistudio.google.com"
-                  class="link">aistudio.google.com</a></p>
-              <textarea id="key-gemini" rows="3" placeholder="AIza..., AIza..., AIza..."></textarea>
+              <p class="field-help">One key per row. Add as many as you need — the bot rotates through them
+                automatically. Free at <a href="https://aistudio.google.com" class="link">aistudio.google.com</a></p>
+              <div id="gemini-keys-list" class="key-rows-list"></div>
+              <button id="btn-add-gemini-key" class="btn-ghost small" style="margin-top:8px;">➕ Add Key</button>
             </div>
             <div class="field">
               <label>⚡ Groq API Key</label>
