@@ -143,7 +143,8 @@ When the user asks to send a FILE to someone else, use BOTH tags together.
 
     getSystemInstruction() {
         const persona = Config.get('characterPrompt') || '';
-        return persona + this.getDateTimeContext() + this.getScheduledTasksContext() + this.getCapabilities();
+        const noPrefix = '\n\nIMPORTANT: NEVER prefix your responses with your name like "[Leoui]:" or "Leoui:" — just reply naturally. The "[Message from Name]:" prefix in user messages is internal metadata, do NOT mirror it.\n';
+        return persona + noPrefix + this.getDateTimeContext() + this.getScheduledTasksContext() + this.getCapabilities();
     }
 
     // ─── Chat History ─────────────────────────────────────────────────────────
