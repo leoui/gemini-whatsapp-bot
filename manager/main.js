@@ -369,35 +369,36 @@ print('OK')
 // ────────────────────────────────────────────────────────────
 
 // Update systemd env var (GEMINI_API_KEY, GROQ_API_KEY, etc.)
-// Uses base64 encoding to safely handle arbitrarily long values
-// (e.g. 7+ Gemini keys as a comma-separated string).
+// Uses double base64 encoding: the env vars payload is b64'd into the Python
+// script, then the entire Python script itself is b64'd for safe shell transport.
 ipcMain.handle('vps:setEnv', async (_e, envVars) => {
     const { serviceName } = getVpsConfig();
     try {
-        // Encode the update dict as base64 JSON — avoids all shell escaping issues
-        const b64 = Buffer.from(JSON.stringify({ serviceName, envVars })).toString('base64');
+        // Base64-encode the env vars payload
+        const payloadB64 = Buffer.from(JSON.stringify(envVars)).toString('base64');
 
-        // Python script that decodes the payload and patches the service file
-        const pyCode = [
-            'import re, json, base64, sys',
-            `payload = json.loads(base64.b64decode('${b64}').decode('utf-8'))`,
-            'svc = payload["serviceName"]',
-            'updates = payload["envVars"]',
-            'f = f"/etc/systemd/system/{svc}.service"',
-            'c = open(f).read()',
-            'for k, v in updates.items():',
-            '    pattern = rf"Environment={k}=.*"',
-            '    replacement = f"Environment={k}={v}"',
-            '    if re.search(pattern, c):',
-            '        c = re.sub(pattern, replacement, c)',
-            '    else:',
-            '        c = c.replace("[Service]\\n", f"[Service]\\nEnvironment={k}={v}\\n", 1)',
-            'open(f, "w").write(c)',
-            'print("OK")',
-        ].join('; ');
+        // Full Python script (multi-line, with for loops — cannot be semicolon-joined)
+        const pyScript = `
+import re, json, base64
+updates = json.loads(base64.b64decode('${payloadB64}').decode('utf-8'))
+f = '/etc/systemd/system/${serviceName}.service'
+c = open(f).read()
+for k, v in updates.items():
+    pat = rf'Environment={k}=.*'
+    repl = f'Environment={k}={v}'
+    if re.search(pat, c):
+        c = re.sub(pat, repl, c)
+    else:
+        c = c.replace('[Service]\\n', f'[Service]\\nEnvironment={k}={v}\\n', 1)
+open(f, 'w').write(c)
+print('OK')
+`.trim();
+
+        // Base64-encode the entire Python script for safe shell transport
+        const scriptB64 = Buffer.from(pyScript).toString('base64');
 
         await sshExec([
-            `python3 -c "${pyCode}"`,
+            `python3 -c "import base64; exec(base64.b64decode('${scriptB64}').decode())"`,
             'systemctl daemon-reload',
             `systemctl restart ${serviceName}`,
             'sleep 2',
