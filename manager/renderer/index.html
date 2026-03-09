@@ -477,15 +477,113 @@
       <section id="panel-status" class="panel">
         <div class="panel-header">
           <h1>Bot Status</h1>
-          <p class="subtitle">Live metrics from your VPS</p>
+          <p class="subtitle">Live health dashboard from your VPS</p>
         </div>
         <div class="card-grid cols-1">
-          <div class="card">
-            <div class="action-row">
+          <!-- Action row -->
+          <div class="card" style="padding:12px 20px;">
+            <div class="action-row" style="margin:0;">
               <button id="btn-refresh-status" class="btn-secondary">🔄 Refresh Status</button>
+              <button id="btn-auto-status" class="btn-ghost small">▶ Auto (30s)</button>
             </div>
-            <pre id="status-output" class="output-box"
-              style="display:block; margin-top:16px;">Click Refresh to load status...</pre>
+          </div>
+
+          <!-- Status dashboard — hidden until first load -->
+          <div id="status-dashboard" class="hidden">
+
+            <!-- Row 1: Big status card -->
+            <div class="card status-hero-card" id="status-hero-card">
+              <div class="status-hero-left">
+                <div class="status-dot-wrap">
+                  <span class="status-dot" id="status-dot"></span>
+                </div>
+                <div>
+                  <div class="status-hero-label" id="status-hero-label">Loading...</div>
+                  <div class="status-hero-sub" id="status-hero-sub"></div>
+                </div>
+              </div>
+              <div class="status-hero-right">
+                <div class="status-badge-row">
+                  <span class="status-chip" id="chip-node"></span>
+                  <span class="status-chip" id="chip-bot"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Row 2: Metric cards -->
+            <div class="status-metrics-grid">
+              <div class="metric-card">
+                <div class="metric-icon">⏱</div>
+                <div class="metric-body">
+                  <div class="metric-label">Uptime</div>
+                  <div class="metric-value" id="metric-uptime">—</div>
+                </div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-icon">🔢</div>
+                <div class="metric-body">
+                  <div class="metric-label">Process ID</div>
+                  <div class="metric-value" id="metric-pid">—</div>
+                </div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-icon">🧵</div>
+                <div class="metric-body">
+                  <div class="metric-label">Tasks</div>
+                  <div class="metric-value" id="metric-tasks">—</div>
+                </div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-icon">⚡</div>
+                <div class="metric-body">
+                  <div class="metric-label">CPU Time</div>
+                  <div class="metric-value" id="metric-cpu">—</div>
+                </div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-icon">🧩</div>
+                <div class="metric-body">
+                  <div class="metric-label">Process Memory</div>
+                  <div class="metric-value" id="metric-procmem">—</div>
+                </div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-icon">📅</div>
+                <div class="metric-body">
+                  <div class="metric-label">Running Since</div>
+                  <div class="metric-value" id="metric-since">—</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Row 3: VPS Memory bar -->
+            <div class="card">
+              <div class="mem-bar-header">
+                <span>🖥 VPS RAM Usage</span>
+                <span id="mem-bar-label" class="mem-bar-numbers">— / — MB</span>
+              </div>
+              <div class="mem-bar-track">
+                <div class="mem-bar-fill" id="mem-bar-fill"></div>
+              </div>
+              <div class="mem-bar-legend">
+                <span id="mem-bar-pct" class="mem-bar-pct">0%</span>
+                <span class="mem-bar-tip">Free: <span id="mem-bar-free">— MB</span></span>
+              </div>
+            </div>
+
+            <!-- Row 4: Recent logs -->
+            <div class="card" style="padding:0; overflow:hidden;">
+              <div class="logs-toolbar" style="border-top:none;">
+                <span style="font-size:12px;font-weight:600;color:var(--text-muted);">📋 RECENT LOG LINES</span>
+              </div>
+              <pre id="status-log-tail" class="status-log-tail"></pre>
+            </div>
+
+          </div>
+
+          <!-- Loading / error placeholder -->
+          <div id="status-placeholder" class="card" style="text-align:center;color:var(--text-muted);padding:40px;">
+            Click <strong>Refresh Status</strong> to load the dashboard
           </div>
         </div>
       </section>

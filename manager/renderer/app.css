@@ -826,3 +826,257 @@ code {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
 }
+
+/* ===== BOT STATUS DASHBOARD ===== */
+
+/* Hero status card */
+.status-hero-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  gap: 16px;
+}
+
+.status-hero-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.status-dot-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.status-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  display: block;
+  position: relative;
+}
+
+.status-dot.active {
+  background: var(--green);
+  box-shadow: 0 0 0 0 rgba(0, 184, 148, 0.5);
+  animation: pulse-green 2.4s ease-in-out infinite;
+}
+
+.status-dot.failed {
+  background: var(--red);
+  box-shadow: 0 0 0 0 rgba(232, 67, 147, 0.5);
+  animation: pulse-red 2s ease-in-out infinite;
+}
+
+.status-dot.inactive {
+  background: var(--yellow);
+}
+
+@keyframes pulse-green {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 184, 148, 0.5);
+  }
+
+  50% {
+    box-shadow: 0 0 0 10px rgba(0, 184, 148, 0);
+  }
+}
+
+@keyframes pulse-red {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(232, 67, 147, 0.5);
+  }
+
+  50% {
+    box-shadow: 0 0 0 10px rgba(232, 67, 147, 0);
+  }
+}
+
+.status-hero-label {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.status-hero-label.active {
+  color: var(--green);
+}
+
+.status-hero-label.failed {
+  color: var(--red);
+}
+
+.status-hero-label.inactive {
+  color: var(--yellow);
+}
+
+.status-hero-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.status-hero-right {
+  flex-shrink: 0;
+}
+
+.status-badge-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.status-chip {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+/* Metric cards grid */
+.status-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: border-color var(--transition);
+}
+
+.metric-card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.metric-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  width: 36px;
+  text-align: center;
+  opacity: 0.85;
+}
+
+.metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.metric-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Memory bar */
+.mem-bar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.mem-bar-numbers {
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mem-bar-track {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mem-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.6s ease, background 0.4s ease;
+  background: var(--green);
+  width: 0%;
+}
+
+.mem-bar-fill.warn {
+  background: var(--yellow);
+}
+
+.mem-bar-fill.danger {
+  background: var(--red);
+}
+
+.mem-bar-legend {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.mem-bar-pct {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.mem-bar-tip {
+  color: var(--text-muted);
+}
+
+/* Status log tail */
+.status-log-tail {
+  background: #060810;
+  color: #8892b0;
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.8;
+  padding: 14px 16px;
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.status-log-tail .log-info {
+  color: #57c7ff;
+}
+
+.status-log-tail .log-warn {
+  color: var(--yellow);
+}
+
+.status-log-tail .log-err {
+  color: var(--red);
+}
+
+.status-log-tail .log-ok {
+  color: var(--green);
+}

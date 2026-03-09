@@ -196,14 +196,79 @@ ipcMain.handle('vps:restart', async () => {
 ipcMain.handle('vps:status', async () => {
     const { serviceName, botDir } = getVpsConfig();
     try {
-        const result = await sshExec([
-            `systemctl status ${serviceName} --no-pager -l | head -15`,
-            `echo "---MEMORY---"`,
-            `free -m | awk 'NR==2{print $3"/"$2" MB"}'`,
+        const raw = await sshExec([
+            `systemctl status ${serviceName} --no-pager -l 2>&1 | head -20`,
+            `echo "---MEM---"`,
+            `free -m | awk 'NR==2{print $3" "$2" "$4}'`,
             `echo "---UPTIME---"`,
             `uptime -p`,
+            `echo "---NODE---"`,
+            `node --version 2>/dev/null || echo "unknown"`,
+            `echo "---BOT---"`,
+            `cd ${botDir} && node -e "try{const p=require('./package.json');console.log(p.version||'?')}catch(e){console.log('?')}" 2>/dev/null || echo "?"`,
+            `echo "---CPU---"`,
+            `top -bn1 | grep "Cpu(s)" | awk '{print $2+$4}' 2>/dev/null || echo "?"`,
+            `echo "---LOGS---"`,
+            `journalctl -u ${serviceName} -n 8 --no-pager --output=short-iso 2>/dev/null | grep -v "^--"`,
         ]);
-        return { ok: true, output: result };
+
+        // ── Section extractor ────────────────────────────────
+        const sec = (tag) => {
+            const m = raw.match(new RegExp(`---${tag}---([\\s\\S]*?)(?=---|$)`));
+            return m ? m[1].trim() : '';
+        };
+
+        // ── Parse systemctl block ────────────────────────────
+        const statusBlock = raw.split('---MEM---')[0].trim();
+        const activeMatch = statusBlock.match(/Active:\s*(.+)/);
+        const activeRaw = activeMatch ? activeMatch[1].trim() : '';
+        const isActive = activeRaw.startsWith('active (running)');
+        const isFailed = activeRaw.startsWith('failed');
+        const sinceMatch = activeRaw.match(/since (.+?);(.+)/);
+        const sinceDate = sinceMatch ? sinceMatch[1].trim() : '';
+        const sinceAgo = sinceMatch ? sinceMatch[2].trim() : '';
+
+        const pidMatch = statusBlock.match(/Main PID:\s*(\d+)/);
+        const tasksMatch = statusBlock.match(/Tasks:\s*(\d+)/);
+        const memHiMatch = statusBlock.match(/Memory:\s*([\d.]+\w+)/);
+        const cpuMatch = statusBlock.match(/CPU:\s*([\S]+)/);
+        const descMatch = statusBlock.match(/\.service - (.+)/);
+
+        // ── Parse memory ─────────────────────────────────────
+        const memParts = sec('MEM').split(/\s+/);
+        const memUsed = parseInt(memParts[0]) || 0;
+        const memTotal = parseInt(memParts[1]) || 1;
+        const memPct = Math.round((memUsed / memTotal) * 100);
+
+        // ── Parse logs — filter the daemon-reload warning ────
+        const rawLogs = sec('LOGS').split('\n').filter(l =>
+            l.trim() &&
+            !l.includes('daemon-reload') &&
+            !l.includes('changed on disk') &&
+            !l.includes('Run \'systemctl')
+        );
+
+        return {
+            ok: true,
+            status: {
+                service: serviceName,
+                description: descMatch ? descMatch[1].trim() : '',
+                state: isActive ? 'active' : isFailed ? 'failed' : 'inactive',
+                activeRaw,
+                sinceDate,
+                sinceAgo,
+                pid: pidMatch ? pidMatch[1] : '?',
+                tasks: tasksMatch ? tasksMatch[1] : '?',
+                processMemory: memHiMatch ? memHiMatch[1] : '?',
+                cpuTime: cpuMatch ? cpuMatch[1] : '?',
+                nodeVersion: sec('NODE').trim(),
+                botVersion: sec('BOT').trim(),
+                cpuPct: sec('CPU').trim(),
+                uptime: sec('UPTIME').replace('up ', '').trim(),
+                mem: { used: memUsed, total: memTotal, pct: memPct },
+                logs: rawLogs,
+            },
+        };
     } catch (e) {
         return { ok: false, error: e.message };
     }

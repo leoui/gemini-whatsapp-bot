@@ -481,15 +481,104 @@ document.getElementById('btn-auto-refresh')?.addEventListener('click', (e) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// PANEL: Bot Status
+// PANEL: Bot Status — visual dashboard
 // ═══════════════════════════════════════════════════════════
-document.getElementById('btn-refresh-status')?.addEventListener('click', async () => {
-    showLoading('btn-refresh-status', 'Fetching...');
+let statusAutoTimer = null;
+
+function colorizeLogLine(line) {
+    const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (/error|ERR|FATAL|fail/i.test(line)) return `<span class="log-err">${escaped}</span>`;
+    if (/warn|WARNING/i.test(line)) return `<span class="log-warn">${escaped}</span>`;
+    if (/INFO|started|loaded|initialized|✅|OK/i.test(line)) return `<span class="log-info">${escaped}</span>`;
+    if (/Gemini|Groq|started|active/i.test(line)) return `<span class="log-ok">${escaped}</span>`;
+    return escaped;
+}
+
+function renderStatusDashboard(s) {
+    // Show dashboard, hide placeholder
+    document.getElementById('status-dashboard').classList.remove('hidden');
+    document.getElementById('status-placeholder').classList.add('hidden');
+
+    // ── Hero card ──────────────────────────────────────────
+    const dot = document.getElementById('status-dot');
+    const label = document.getElementById('status-hero-label');
+    const sub = document.getElementById('status-hero-sub');
+    dot.className = `status-dot ${s.state}`;
+    label.className = `status-hero-label ${s.state}`;
+    label.textContent = s.state === 'active' ? '● Running'
+        : s.state === 'failed' ? '● Failed'
+            : '● Inactive';
+    sub.textContent = s.sinceAgo
+        ? `${s.description} — up ${s.sinceAgo}`
+        : s.description;
+
+    document.getElementById('chip-node').textContent = `Node ${s.nodeVersion}`;
+    document.getElementById('chip-bot').textContent = `Bot v${s.botVersion}`;
+
+    // ── Metric cards ──────────────────────────────────────
+    document.getElementById('metric-uptime').textContent = s.uptime || '—';
+    document.getElementById('metric-pid').textContent = s.pid || '—';
+    document.getElementById('metric-tasks').textContent = s.tasks || '—';
+    document.getElementById('metric-cpu').textContent = s.cpuTime || '—';
+    document.getElementById('metric-procmem').textContent = s.processMemory || '—';
+    document.getElementById('metric-since').textContent = s.sinceDate
+        ? s.sinceDate.replace(/\s+WIB|UTC|GMT.*/i, '').trim()
+        : '—';
+
+    // ── Memory bar ────────────────────────────────────────
+    const { used, total, pct } = s.mem;
+    const free = total - used;
+    document.getElementById('mem-bar-label').textContent = `${used.toLocaleString()} / ${total.toLocaleString()} MB`;
+    document.getElementById('mem-bar-pct').textContent = `${pct}%`;
+    document.getElementById('mem-bar-free').textContent = `${free.toLocaleString()} MB`;
+    const fill = document.getElementById('mem-bar-fill');
+    fill.style.width = `${Math.min(pct, 100)}%`;
+    fill.className = `mem-bar-fill${pct >= 85 ? ' danger' : pct >= 65 ? ' warn' : ''}`;
+
+    // ── Log tail ──────────────────────────────────────────
+    const logEl = document.getElementById('status-log-tail');
+    if (s.logs && s.logs.length) {
+        logEl.innerHTML = s.logs.map(colorizeLogLine).join('\n');
+        logEl.scrollTop = logEl.scrollHeight;
+    } else {
+        logEl.textContent = '(no recent log lines)';
+    }
+}
+
+async function loadStatus() {
+    showLoading('btn-refresh-status', '⏳ Loading...');
     const result = await BM.vps.status();
     stopLoading('btn-refresh-status');
-    const el = document.getElementById('status-output');
-    el.textContent = result.ok ? result.output : '❌ ' + result.error;
+    if (result.ok && result.status) {
+        renderStatusDashboard(result.status);
+    } else {
+        document.getElementById('status-placeholder').classList.remove('hidden');
+        document.getElementById('status-placeholder').innerHTML =
+            `<span style="color:var(--red)">❌ ${result.error || 'Failed to fetch status'}</span>`;
+        document.getElementById('status-dashboard').classList.add('hidden');
+        toast('❌ Status fetch failed: ' + (result.error || 'unknown error'), 'error');
+    }
+}
+
+document.getElementById('btn-refresh-status')?.addEventListener('click', loadStatus);
+
+document.getElementById('btn-auto-status')?.addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    if (statusAutoTimer) {
+        clearInterval(statusAutoTimer);
+        statusAutoTimer = null;
+        btn.textContent = '▶ Auto (30s)';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-ghost');
+    } else {
+        statusAutoTimer = setInterval(loadStatus, 30000);
+        loadStatus();
+        btn.textContent = '⏸ Stop Auto';
+        btn.classList.remove('btn-ghost');
+        btn.classList.add('btn-primary');
+    }
 });
+
 
 // ═══════════════════════════════════════════════════════════
 // PANEL: Import from VPS (onboarding — auto-fills all panels)
