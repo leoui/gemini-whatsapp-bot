@@ -76,11 +76,20 @@ class GroqService {
         const characterPrompt = Config.get('characterPrompt') ||
             'You are a friendly, helpful WhatsApp assistant. Keep responses concise and natural. Answer in the same language the user writes in.';
 
+        // Compute GMT+7 explicitly (no TZ env dependency)
+        const nowUtc = new Date();
+        const wib = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000);
+        const pad = (n) => String(n).padStart(2, '0');
+        const WIB_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const WIB_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const dateTimeStr = `${WIB_DAYS[wib.getUTCDay()]}, ${WIB_MONTHS[wib.getUTCMonth()]} ${wib.getUTCDate()}, ${wib.getUTCFullYear()}, ${pad(wib.getUTCHours())}:${pad(wib.getUTCMinutes())}:${pad(wib.getUTCSeconds())} WIB (UTC+7)`;
+        const dateTimeContext = `\n\n=== CURRENT DATE & TIME ===\nRight now: ${dateTimeStr}\nIMPORTANT: When asked about the date or time, use this exact value. Do NOT say you cannot show real-time time — you CAN, and this is it.\n`;
+
         const history = this.getHistory(chatId);
         const messages = [
             {
                 role: 'system',
-                content: characterPrompt + '\n\nIMPORTANT: You handle only simple conversational messages. For any request involving file creation, image generation, reminders, scheduling, maps, calculations, or data analysis, respond naturally but let the user know you can handle that — the system will route those to the appropriate processor.',
+                content: characterPrompt + dateTimeContext + '\n\nIMPORTANT: You handle simple conversational messages. For file creation, image generation, reminders, or scheduling, respond naturally.',
             },
             ...history,
             {
