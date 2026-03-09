@@ -127,6 +127,16 @@ async function generateHealthReport(services) {
     const botDir = path.join(__dirname, '..');
     const startTime = process.uptime();
 
+    // Compute GMT+7 (WIB) without relying on TZ env variable
+    const nowUtc = new Date();
+    const wibMs = nowUtc.getTime() + 7 * 60 * 60 * 1000;
+    const wib = new Date(wibMs);
+    const pad = (n) => String(n).padStart(2, '0');
+    const WIB_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const WIB_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const serverDateStr = `${WIB_DAYS[wib.getUTCDay()]}, ${WIB_MONTHS[wib.getUTCMonth()]} ${wib.getUTCDate()}, ${wib.getUTCFullYear()}`;
+    const serverTimeStr = `${pad(wib.getUTCHours())}:${pad(wib.getUTCMinutes())}:${pad(wib.getUTCSeconds())} WIB`;
+
     const uptimeH = Math.floor(startTime / 3600);
     const uptimeM = Math.floor((startTime % 3600) / 60);
     const memMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
@@ -214,6 +224,7 @@ async function generateHealthReport(services) {
 
     const report = `🤖 *Bot Health Check*
 ${divider}
+🕐 Server Time: ${serverDateStr}, ${serverTimeStr}
 ⏱ Uptime: ${uptimeH}h ${uptimeM}m
 💾 Memory: ${memMB} MB used / ${memTotalMB} MB total
 🖥 Node.js: ${nodeVer}

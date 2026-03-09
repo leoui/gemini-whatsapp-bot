@@ -108,19 +108,42 @@ When the user asks to send a FILE to someone else, use BOTH tags together.
     }
 
     getDateTimeContext() {
+        // Compute GMT+7 explicitly via UTC offset — does not rely on TZ env variable.
         const now = new Date();
-        const wibOptions = {
-            timeZone: 'Asia/Jakarta',
-            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-        };
-        const wibStr = now.toLocaleString('id-ID', wibOptions);
-        return `\n\n=== CURRENT DATE & TIME ===\nRight now: ${wibStr} WIB (Asia/Jakarta, UTC+7)\nIMPORTANT: Always use this as the current date and time. Never use any other date.\n`;
+        const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000); // shift to UTC+7
+        const pad = (n) => String(n).padStart(2, '0');
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const dayName = days[wib.getUTCDay()];
+        const monthName = months[wib.getUTCMonth()];
+        const dateStr = `${dayName}, ${monthName} ${wib.getUTCDate()}, ${wib.getUTCFullYear()}`;
+        const timeStr = `${pad(wib.getUTCHours())}:${pad(wib.getUTCMinutes())}:${pad(wib.getUTCSeconds())}`;
+        return `\n\n=== CURRENT DATE & TIME ===\nRight now: ${dateStr}, ${timeStr} WIB (Asia/Jakarta, UTC+7)\nIMPORTANT: Always use this exact date and time. Never use any other date or time.\n`;
+    }
+
+    getScheduledTasksContext() {
+        const tasks = (Config.get('scheduledTasks') || []).filter(t => t.status === 'pending');
+        if (tasks.length === 0) {
+            return '\n\n=== SCHEDULED TASKS ===\nNo pending scheduled tasks.\n';
+        }
+        const now = new Date();
+        const wibOffset = 7 * 60 * 60 * 1000;
+        const lines = tasks.map((t, i) => {
+            const due = new Date(t.dueAt);
+            const dueWib = new Date(due.getTime() + wibOffset);
+            const pad = (n) => String(n).padStart(2, '0');
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const dueStr = `${months[dueWib.getUTCMonth()]} ${dueWib.getUTCDate()}, ${dueWib.getUTCFullYear()} ${pad(dueWib.getUTCHours())}:${pad(dueWib.getUTCMinutes())} WIB`;
+            const minsLeft = Math.round((due.getTime() - now.getTime()) / 60000);
+            const eta = minsLeft > 0 ? `in ${minsLeft} min` : 'overdue';
+            return `${i + 1}. [${t.id}] "${t.message}" → ${t.targetJid} — due ${dueStr} (${eta}), created by ${t.createdBy}`;
+        });
+        return `\n\n=== SCHEDULED TASKS (${tasks.length} pending) ===\n${lines.join('\n')}\nIMPORTANT: When the user asks to list/show/check reminders or scheduled tasks, list the above tasks. To cancel a task you must tell the user the task ID.\n`;
     }
 
     getSystemInstruction() {
         const persona = Config.get('characterPrompt') || '';
-        return persona + this.getDateTimeContext() + this.getCapabilities();
+        return persona + this.getDateTimeContext() + this.getScheduledTasksContext() + this.getCapabilities();
     }
 
     // ─── Chat History ─────────────────────────────────────────────────────────
