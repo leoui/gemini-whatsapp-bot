@@ -58,6 +58,24 @@ document.querySelectorAll('.nav-item').forEach(item => {
     });
 });
 
+// ── Auto-import all config from VPS on startup ───────────────
+// Silently pulls env vars + bot config from VPS and pre-fills
+// every panel, so the user never sees empty fields on launch.
+(async function autoLoadFromVPS() {
+    try {
+        const result = await BM.vps.importAll();
+        if (result?.ok) {
+            applyImportedConfig(result);
+            // Keep the import summary card hidden — this was a silent load
+            document.getElementById('import-summary-card')?.classList.add('hidden');
+            console.log('[Startup] Auto-imported config from VPS');
+        }
+    } catch (e) {
+        console.log('[Startup] Auto-import skipped:', e.message);
+    }
+})();
+
+
 // ── Toggle password visibility ───────────────────────────────
 document.querySelectorAll('.btn-toggle-vis').forEach(btn => {
     btn.addEventListener('click', () => {

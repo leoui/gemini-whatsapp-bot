@@ -1,6 +1,6 @@
 {
     "name": "whatsapp-bot-manager",
-    "version": "1.2.4",
+    "version": "1.2.5",
     "description": "macOS configuration manager for Gemini WhatsApp Bot — SSH-based VPS management",
     "main": "main.js",
     "scripts": {
