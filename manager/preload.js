@@ -30,5 +30,13 @@ contextBridge.exposeInMainWorld('BotManager', {
     app: {
         uninstall: () => ipcRenderer.invoke('app:uninstall'),
     },
+    // Google Drive
+    gdrive: {
+        saveCredentials: (creds) => ipcRenderer.invoke('gdrive:saveCredentials', creds),
+        login: () => ipcRenderer.invoke('gdrive:login'),
+        logout: () => ipcRenderer.invoke('gdrive:logout'),
+        status: () => ipcRenderer.invoke('gdrive:status'),
+        uploadBackup: (opts) => ipcRenderer.invoke('gdrive:uploadBackup', opts),
+    },
 });
 

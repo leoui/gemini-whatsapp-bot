@@ -99,7 +99,7 @@
             <div class="field-row cols-2">
               <div class="field">
                 <label>VPS IP / Hostname</label>
-                <input type="text" id="vps-host" placeholder="YOUR_VPS_IP" />
+                <input type="text" id="vps-host" placeholder="your.vps.ip.address" />
               </div>
               <div class="field">
                 <label>SSH Port</label>
@@ -378,11 +378,11 @@
       <section id="panel-backup" class="panel">
         <div class="panel-header">
           <h1>Backup</h1>
-          <p class="subtitle">Create VPS backups and optionally upload to Google Drive</p>
+          <p class="subtitle">Create VPS backups and upload to Google Drive</p>
         </div>
         <div class="card-grid cols-1">
           <div class="card">
-            <h3>VPS Backup</h3>
+            <h3>📦 VPS Backup</h3>
             <p class="field-help">Creates a <code>.tar.gz</code> of the bot directory (excluding session and
               node_modules) on the VPS.</p>
             <div class="action-row">
@@ -392,30 +392,60 @@
           </div>
           <div class="card">
             <h3>☁️ Google Drive Backup</h3>
-            <p class="field-help">Sign in with Google to automatically upload backups to your Google Drive. Uses OAuth
-              2.0 — your credentials are never stored on the VPS.</p>
-            <div id="gdrive-status" class="gdrive-status">
-              <span id="gdrive-user-text">Not connected to Google Drive</span>
+            <p class="field-help">Sign in with Google to upload backups to your Drive. Requires a free Google Cloud
+              OAuth Client ID (one-time setup).</p>
+
+            <!-- Step 1: credentials -->
+            <div id="gdrive-creds-section">
+              <div class="info-box" style="margin-bottom:16px;">
+                <strong>🔧 One-time setup required:</strong><br />
+                1. Go to <a href="https://console.cloud.google.com" class="link">console.cloud.google.com</a><br />
+                2. Create a project → Enable <strong>Google Drive API</strong><br />
+                3. APIs &amp; Services → Credentials → <strong>Create OAuth Client ID</strong><br />
+                4. Choose <strong>Desktop application</strong> → Copy Client ID &amp; Secret
+              </div>
+              <div class="field-row cols-2">
+                <div class="field">
+                  <label>Google OAuth Client ID</label>
+                  <input type="text" id="gdrive-client-id" placeholder="1234567890-xxx.apps.googleusercontent.com" />
+                </div>
+                <div class="field">
+                  <label>Client Secret</label>
+                  <input type="password" id="gdrive-client-secret" placeholder="GOCSPX-..." />
+                  <button class="btn-toggle-vis" data-target="gdrive-client-secret">👁 Show</button>
+                </div>
+              </div>
+              <div class="action-row">
+                <button id="btn-gdrive-save-creds" class="btn-secondary">💾 Save Credentials</button>
+                <button id="btn-gdrive-login" class="btn-google">
+                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G"
+                    class="google-icon" />
+                  Sign in with Google
+                </button>
+              </div>
             </div>
-            <div class="action-row">
-              <button id="btn-gdrive-login" class="btn-google">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G"
-                  class="google-icon" />
-                Sign in with Google
-              </button>
-              <button id="btn-gdrive-logout" class="btn-ghost hidden">Sign out</button>
+
+            <!-- Step 2: signed in state -->
+            <div id="gdrive-signed-in-section" class="hidden">
+              <div class="gdrive-status" id="gdrive-status-box">
+                <span id="gdrive-user-text">✅ Signed in</span>
+              </div>
+              <div class="field" style="margin-top:12px;">
+                <label>Google Drive Folder ID (optional)</label>
+                <input type="text" id="gdrive-folder-id" placeholder="Leave empty to upload to Drive root" />
+                <p class="field-help">Find a folder ID in Drive URL:
+                  drive.google.com/drive/folders/<strong>THIS_PART</strong></p>
+              </div>
+              <div class="action-row">
+                <button id="btn-gdrive-upload" class="btn-primary">☁️ Upload Latest Backup to Drive</button>
+                <button id="btn-gdrive-logout" class="btn-ghost">Sign out</button>
+              </div>
             </div>
-            <div class="field" id="gdrive-folder-field" style="display:none">
-              <label>Google Drive Folder ID (optional)</label>
-              <input type="text" id="gdrive-folder-id" placeholder="Leave empty to use root" />
-            </div>
-            <div class="action-row" id="gdrive-upload-row" style="display:none">
-              <button id="btn-gdrive-upload" class="btn-primary">☁️ Upload Latest Backup</button>
-            </div>
+
             <div id="backup-drive-output" class="output-box hidden"></div>
-            <div class="info-box">
-              <strong>ℹ️ How it works:</strong> The backup is created on your VPS, then downloaded to this Mac via SSH,
-              then uploaded to your Google Drive — all in one click.
+            <div class="info-box" style="margin-top:16px;">
+              <strong>ℹ️ How it works:</strong> Takes a VPS backup → downloads it to your Mac via SFTP → uploads to
+              Google Drive. Your VPS credentials never touch Google's servers.
             </div>
           </div>
         </div>

@@ -334,3 +334,278 @@ ipcMain.handle('app:uninstall', async () => {
         return { ok: false, error: e.message };
     }
 });
+// ────────────────────────────────────────────────────────────
+// Google Drive OAuth2 helpers (Desktop/Installed App flow)
+// Uses loopback redirect: http://127.0.0.1:PORT
+// All done with built-in Node modules — no googleapis dep needed.
+// ────────────────────────────────────────────────────────────
+const http = require('http');
+const https = require('https');
+const net = require('net');
+const fs = require('fs');
+const os = require('os');
+
+const GDRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.file';
+const GDRIVE_TOKEN_KEY = 'gdrive.tokens';
+const GDRIVE_CREDS_KEY = 'gdrive.credentials';
+
+/** Find a free local port */
+function getFreePort() {
+    return new Promise((resolve, reject) => {
+        const srv = net.createServer();
+        srv.listen(0, '127.0.0.1', () => {
+            const port = srv.address().port;
+            srv.close(() => resolve(port));
+        });
+        srv.on('error', reject);
+    });
+}
+
+/** POST to Google token endpoint (built-in https) */
+function tokenRequest(params) {
+    return new Promise((resolve, reject) => {
+        const body = new URLSearchParams(params).toString();
+        const req = https.request({
+            hostname: 'oauth2.googleapis.com',
+            path: '/token',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) },
+        }, (res) => {
+            const chunks = [];
+            res.on('data', c => chunks.push(c));
+            res.on('end', () => {
+                try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
+                catch (e) { reject(e); }
+            });
+        });
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+    });
+}
+
+/** GET Google userInfo to get email */
+function getUserInfo(accessToken) {
+    return new Promise((resolve, reject) => {
+        https.get({
+            hostname: 'www.googleapis.com',
+            path: '/oauth2/v2/userinfo',
+            headers: { Authorization: `Bearer ${accessToken}` },
+        }, (res) => {
+            const chunks = [];
+            res.on('data', c => chunks.push(c));
+            res.on('end', () => {
+                try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
+                catch { resolve({}); }
+            });
+        }).on('error', reject);
+    });
+}
+
+/** Refresh an expired access token */
+async function refreshAccessToken(tokens, clientId, clientSecret) {
+    if (!tokens.refresh_token) throw new Error('No refresh token — re-login required');
+    const result = await tokenRequest({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: tokens.refresh_token,
+        grant_type: 'refresh_token',
+    });
+    if (result.error) throw new Error(result.error_description || result.error);
+    const updated = { ...tokens, access_token: result.access_token, expiry: Date.now() + result.expires_in * 1000 };
+    store.set(GDRIVE_TOKEN_KEY, updated);
+    return updated;
+}
+
+/** Get a valid access token (refresh if expired) */
+async function getValidToken() {
+    let tokens = store.get(GDRIVE_TOKEN_KEY);
+    if (!tokens) throw new Error('Not signed in to Google');
+    const creds = store.get(GDRIVE_CREDS_KEY);
+    if (!creds) throw new Error('No Google credentials configured');
+    if (!tokens.expiry || Date.now() > tokens.expiry - 60000) {
+        tokens = await refreshAccessToken(tokens, creds.clientId, creds.clientSecret);
+    }
+    return tokens.access_token;
+}
+
+/** Upload a file to Google Drive using multipart upload */
+function uploadToDrive(accessToken, filename, filePath, folderId) {
+    return new Promise((resolve, reject) => {
+        const fileBuffer = fs.readFileSync(filePath);
+        const boundary = 'bot_manager_boundary_' + Date.now();
+        const metadata = JSON.stringify({ name: filename, ...(folderId ? { parents: [folderId] } : {}) });
+        const metaPart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`;
+        const filePart = `--${boundary}\r\nContent-Type: application/gzip\r\n\r\n`;
+        const closing = `\r\n--${boundary}--`;
+        const body = Buffer.concat([
+            Buffer.from(metaPart),
+            Buffer.from(filePart),
+            fileBuffer,
+            Buffer.from(closing),
+        ]);
+        const req = https.request({
+            hostname: 'www.googleapis.com',
+            path: '/upload/drive/v3/files?uploadType=multipart',
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': `multipart/related; boundary=${boundary}`,
+                'Content-Length': body.length,
+            },
+        }, (res) => {
+            const chunks = [];
+            res.on('data', c => chunks.push(c));
+            res.on('end', () => {
+                try {
+                    const result = JSON.parse(Buffer.concat(chunks).toString());
+                    if (result.id) resolve(result);
+                    else reject(new Error(result.error?.message || 'Drive upload failed'));
+                } catch (e) { reject(e); }
+            });
+        });
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+    });
+}
+
+// ────────────────────────────────────────────────────────────
+// IPC: Save Google credentials (Client ID + Secret)
+// ────────────────────────────────────────────────────────────
+ipcMain.handle('gdrive:saveCredentials', (_e, { clientId, clientSecret }) => {
+    store.set(GDRIVE_CREDS_KEY, { clientId, clientSecret });
+    return { ok: true };
+});
+
+// ────────────────────────────────────────────────────────────
+// IPC: Google Drive OAuth2 login
+// ────────────────────────────────────────────────────────────
+ipcMain.handle('gdrive:login', async () => {
+    const creds = store.get(GDRIVE_CREDS_KEY);
+    if (!creds?.clientId || !creds?.clientSecret) {
+        return { ok: false, error: 'Enter your Google OAuth Client ID and Secret first.' };
+    }
+
+    try {
+        const port = await getFreePort();
+        const redirectUri = `http://127.0.0.1:${port}`;
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+            `client_id=${encodeURIComponent(creds.clientId)}&` +
+            `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+            `response_type=code&` +
+            `scope=${encodeURIComponent(GDRIVE_SCOPES)}&` +
+            `access_type=offline&prompt=consent`;
+
+        // Open in default browser
+        await shell.openExternal(authUrl);
+
+        // Wait for callback with auth code
+        const code = await new Promise((resolve, reject) => {
+            const server = http.createServer((req, res) => {
+                const url = new URL(req.url, `http://127.0.0.1:${port}`);
+                const code = url.searchParams.get('code');
+                const error = url.searchParams.get('error');
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.end(`<html><body style="font-family:sans-serif;text-align:center;padding-top:80px;background:#0f1117;color:#e8eaf6">
+                    <h2>${code ? '✅ Signed In!' : '❌ ' + (error || 'Error')}</h2>
+                    <p>${code ? 'You can close this tab and return to Bot Manager.' : 'Please try again in the app.'}</p>
+                    <script>setTimeout(()=>window.close(),2000)</script></body></html>`);
+                server.close();
+                if (code) resolve(code);
+                else reject(new Error(error || 'No code received'));
+            });
+            server.listen(port, '127.0.0.1');
+            // Timeout after 3 minutes
+            setTimeout(() => { server.close(); reject(new Error('Login timed out — try again')); }, 180000);
+        });
+
+        // Exchange code for tokens
+        const tokens = await tokenRequest({
+            code,
+            client_id: creds.clientId,
+            client_secret: creds.clientSecret,
+            redirect_uri: redirectUri,
+            grant_type: 'authorization_code',
+        });
+        if (tokens.error) throw new Error(tokens.error_description || tokens.error);
+
+        tokens.expiry = Date.now() + (tokens.expires_in || 3600) * 1000;
+        store.set(GDRIVE_TOKEN_KEY, tokens);
+
+        // Get user email
+        const userInfo = await getUserInfo(tokens.access_token);
+        return { ok: true, email: userInfo.email || 'Google Account' };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
+// ────────────────────────────────────────────────────────────
+// IPC: Google Drive status
+// ────────────────────────────────────────────────────────────
+ipcMain.handle('gdrive:status', async () => {
+    const tokens = store.get(GDRIVE_TOKEN_KEY);
+    const creds = store.get(GDRIVE_CREDS_KEY);
+    if (!tokens) return { loggedIn: false, creds: creds || null };
+    try {
+        const accessToken = await getValidToken();
+        const userInfo = await getUserInfo(accessToken);
+        return { loggedIn: true, email: userInfo.email, creds: creds || null };
+    } catch {
+        return { loggedIn: false, creds: creds || null };
+    }
+});
+
+// ────────────────────────────────────────────────────────────
+// IPC: Google Drive logout
+// ────────────────────────────────────────────────────────────
+ipcMain.handle('gdrive:logout', () => {
+    store.delete(GDRIVE_TOKEN_KEY);
+    return { ok: true };
+});
+
+// ────────────────────────────────────────────────────────────
+// IPC: Upload latest VPS backup to Google Drive
+// Downloads from VPS via SFTP → uploads to Drive
+// ────────────────────────────────────────────────────────────
+ipcMain.handle('gdrive:uploadBackup', async (_e, { folderId } = {}) => {
+    const { botDir } = getVpsConfig();
+    try {
+        // 1. Get valid Drive token
+        const accessToken = await getValidToken();
+
+        // 2. Find latest backup on VPS
+        const latestFile = await sshExec(`ls -t /root/whatsapp-bot-backup-*.tar.gz 2>/dev/null | head -1`);
+        if (!latestFile || latestFile.includes('[ERR]')) throw new Error('No backup found on VPS. Take a backup first.');
+        const remoteFile = latestFile.trim();
+        const filename = path.basename(remoteFile);
+
+        // 3. Download from VPS via SFTP
+        const localPath = path.join(os.tmpdir(), filename);
+        await new Promise((resolve, reject) => {
+            const cfg = getVpsConfig();
+            const conn = new SshClient();
+            conn.on('ready', () => {
+                conn.sftp((err, sftp) => {
+                    if (err) { conn.end(); return reject(err); }
+                    sftp.fastGet(remoteFile, localPath, (err) => {
+                        conn.end();
+                        if (err) reject(err); else resolve();
+                    });
+                });
+            }).on('error', reject)
+                .connect({ host: cfg.host, port: cfg.port, username: cfg.username, password: cfg.password, readyTimeout: 15000 });
+        });
+
+        // 4. Upload to Google Drive
+        const driveFile = await uploadToDrive(accessToken, filename, localPath, folderId || null);
+
+        // 5. Clean up local temp file
+        try { fs.unlinkSync(localPath); } catch { }
+
+        return { ok: true, filename, driveFileId: driveFile.id, driveFileName: driveFile.name };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});

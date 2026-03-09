@@ -372,18 +372,76 @@ document.getElementById('btn-take-backup')?.addEventListener('click', async () =
     }
 });
 
-// Google Drive (OAuth via browser window — placeholder flow)
-document.getElementById('btn-gdrive-login')?.addEventListener('click', () => {
-    // In a full implementation this would use a BrowserWindow to handle the OAuth flow.
-    // The Google Drive OAuth client ID would be configured via .env or app config.
-    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=YOUR_CLIENT_ID&redirect_uri=urn:ietf:wg:oauth:2.0:oob&response_type=code&scope=https://www.googleapis.com/auth/drive.file&access_type=offline';
-    toast('ℹ️ Opening Google sign-in... (configure OAuth client ID in app settings)', 'info');
-    // Placeholder — actual impl needs Google OAuth client ID registration
-    setTimeout(() => {
-        document.getElementById('gdrive-user-text').textContent = '⚠️ OAuth Client ID required — see INSTALL.md';
-        document.getElementById('gdrive-folder-field').style.display = 'block';
-    }, 500);
+// Google Drive — real OAuth2 flow
+function setGDriveSignedIn(email) {
+    document.getElementById('gdrive-creds-section').classList.add('hidden');
+    document.getElementById('gdrive-signed-in-section').classList.remove('hidden');
+    document.getElementById('gdrive-user-text').textContent = `✅ Signed in as ${email}`;
+}
+function setGDriveSignedOut() {
+    document.getElementById('gdrive-creds-section').classList.remove('hidden');
+    document.getElementById('gdrive-signed-in-section').classList.add('hidden');
+}
+
+// Restore stored credentials into fields on load
+BM.gdrive.status().then(status => {
+    if (status.creds) {
+        document.getElementById('gdrive-client-id').value = status.creds.clientId || '';
+        document.getElementById('gdrive-client-secret').value = status.creds.clientSecret || '';
+    }
+    if (status.loggedIn) setGDriveSignedIn(status.email);
+    else setGDriveSignedOut();
 });
+
+document.getElementById('btn-gdrive-save-creds')?.addEventListener('click', async () => {
+    const clientId = document.getElementById('gdrive-client-id').value.trim();
+    const clientSecret = document.getElementById('gdrive-client-secret').value.trim();
+    if (!clientId || !clientSecret) { toast('⚠️ Both Client ID and Secret are required', 'error'); return; }
+    await BM.gdrive.saveCredentials({ clientId, clientSecret });
+    toast('✅ Credentials saved — now click Sign in with Google', 'success');
+});
+
+document.getElementById('btn-gdrive-login')?.addEventListener('click', async () => {
+    const clientId = document.getElementById('gdrive-client-id').value.trim();
+    const clientSecret = document.getElementById('gdrive-client-secret').value.trim();
+    if (clientId && clientSecret) await BM.gdrive.saveCredentials({ clientId, clientSecret });
+
+    showLoading('btn-gdrive-login', '⏳ Opening browser...');
+    setOutput('backup-drive-output', '🌐 Google sign-in opened in your browser. Complete it there, then return here.', '');
+    const result = await BM.gdrive.login();
+    stopLoading('btn-gdrive-login');
+    if (result.ok) {
+        setGDriveSignedIn(result.email);
+        setOutput('backup-drive-output', `✅ Signed in as ${result.email}`, 'success');
+        toast(`✅ Signed in as ${result.email}`, 'success');
+    } else {
+        setOutput('backup-drive-output', '❌ Login failed: ' + result.error, 'error');
+        toast('❌ Login failed: ' + result.error, 'error');
+    }
+});
+
+document.getElementById('btn-gdrive-logout')?.addEventListener('click', async () => {
+    await BM.gdrive.logout();
+    setGDriveSignedOut();
+    setOutput('backup-drive-output', 'Signed out from Google Drive.', '');
+    toast('✅ Signed out', 'info');
+});
+
+document.getElementById('btn-gdrive-upload')?.addEventListener('click', async () => {
+    const folderId = document.getElementById('gdrive-folder-id').value.trim() || undefined;
+    showLoading('btn-gdrive-upload', '⏳ Uploading...');
+    setOutput('backup-drive-output', '📥 Downloading backup from VPS via SFTP…', '');
+    const result = await BM.gdrive.uploadBackup({ folderId });
+    stopLoading('btn-gdrive-upload');
+    if (result.ok) {
+        setOutput('backup-drive-output', `✅ Uploaded to Google Drive!\n📄 File: ${result.driveFileName}\n🆔 Drive ID: ${result.driveFileId}`, 'success');
+        toast(`✅ Backup uploaded to Google Drive`, 'success');
+    } else {
+        setOutput('backup-drive-output', '❌ Upload failed: ' + result.error, 'error');
+        toast('❌ Upload failed: ' + result.error, 'error');
+    }
+});
+
 
 // ═══════════════════════════════════════════════════════════
 // PANEL: Live Logs
