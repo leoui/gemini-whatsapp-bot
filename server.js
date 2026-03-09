@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Gemini WhatsApp Bot — Headless Server Mode
+ * Gemini WhatsApp Bot — Headless Server Mode v2
  * For Linux VPS / Cloud Server deployment (512MB RAM)
  * Runs without Electron GUI, using terminal for QR and logs.
  *
@@ -8,7 +8,9 @@
  *   node server.js
  *
  * Environment:
- *   GEMINI_API_KEY=your_key (or configure via config.json)
+ *   GEMINI_API_KEY=your_key1,your_key2  (required)
+ *   GROQ_API_KEY=gsk_...               (optional, for free simple-chat routing)
+ *   POLLINATIONS_API_KEY=sk_...        (optional, for image generation)
  */
 
 const path = require('path');
@@ -18,13 +20,15 @@ const http = require('http');
 const Config = require('./services/config');
 const WhatsAppService = require('./services/whatsapp');
 const GeminiService = require('./services/gemini');
+const GroqService = require('./services/groq');
 const CalendarService = require('./services/calendar');
 const HumanBehavior = require('./services/humanBehavior');
 const FileManager = require('./services/fileManager');
 const Scheduler = require('./services/scheduler');
+const Router = require('./services/router');
 
 // --- Service Instances ---
-let whatsapp, gemini, calendar, humanBehavior, fileManager;
+let whatsapp, gemini, groq, calendar, humanBehavior, fileManager;
 let messageLog = [];
 
 // --- Console Helpers ---
@@ -275,6 +279,7 @@ async function handleIncomingMessage(msg) {
 
         if (!responseResult) {
             if (mediaContext) {
+                // Media always goes to Gemini (multimodal)
                 log('info', `[HANDLER] Sending ${mediaContext.mediaType} (${mediaContext.mimetype}) to Gemini for analysis...`);
                 const tempExt = {
                     'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp',
@@ -286,8 +291,19 @@ async function handleIncomingMessage(msg) {
                 responseResult = await gemini.processFile(chatId, tempPath, mediaContext.mimetype, userPrompt, msg.senderName);
                 if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
             } else {
-                log('info', `[HANDLER] Requesting text response from Gemini...`);
-                responseResult = await gemini.generateResponse(chatId, msg.text, msg.senderName);
+                // Route: simple chat → Groq (free), complex tasks → Gemini
+                const aiTarget = Router.classify(msg);
+                if (aiTarget === 'groq' && groq && groq.isAvailable()) {
+                    log('info', `[Router] → Groq (simple chat)`);
+                    responseResult = await groq.generateResponse(chatId, msg.text, msg.senderName);
+                    if (!responseResult) {
+                        log('warn', `[Router] Groq failed, falling back to Gemini`);
+                    }
+                }
+                if (!responseResult) {
+                    log('info', `[Router] → Gemini (${aiTarget === 'groq' ? 'Groq fallback' : 'complex task'})`);
+                    responseResult = await gemini.generateResponse(chatId, msg.text, msg.senderName);
+                }
             }
         }
 
@@ -640,6 +656,7 @@ function resolveContact(target) {
 function initializeServices() {
     whatsapp = new WhatsAppService();
     gemini = new GeminiService();
+    groq = new GroqService();
     calendar = new CalendarService();
     humanBehavior = new HumanBehavior();
     fileManager = new FileManager();
@@ -753,7 +770,8 @@ async function main() {
     }
 
     log('info', `API keys: ${(Config.get('geminiKeys') || []).length} configured`);
-    log('info', `Model: ${Config.get('geminiModel') || 'gemini-2.5-pro'}`);
+    log('info', `Model: ${Config.get('geminiModel') || 'gemini-2.5-flash'}`);
+    log('info', `Groq routing: ${(process.env.GROQ_API_KEY || Config.get('groqApiKey')) ? 'enabled (simple chat → Llama 3.3 70B)' : 'disabled (set GROQ_API_KEY to enable)'}`);
     log('info', `Saved contacts: ${(Config.get('savedContacts') || []).length}`);
     log('info', `Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`);
 

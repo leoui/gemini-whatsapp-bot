@@ -1,7 +1,7 @@
 {
   "name": "gemini-whatsapp-bot",
-  "version": "1.0.0",
-  "description": "WhatsApp Bot powered by Google Gemini AI",
+  "version": "2.0.0",
+  "description": "WhatsApp AI assistant powered by Google Gemini (complex tasks) and Groq/Llama (simple chat). Image generation, file creation, reminders, scheduling, and more.",
   "main": "main.js",
   "scripts": {
     "dev": "electron .",
@@ -15,12 +15,12 @@
   "author": "Lewi Verdatama",
   "license": "MIT",
   "dependencies": {
-    "@google/generative-ai": "latest",
-    "@google/genai": "latest",
+    "@google/genai": "^0.9.0",
     "@whiskeysockets/baileys": "^6.7.17",
     "electron-store": "^8.2.0",
     "exceljs": "^4.4.0",
     "googleapis": "^144.0.0",
+    "groq-sdk": "^0.9.0",
     "link-preview-js": "^3.0.5",
     "pdfkit": "^0.17.2",
     "pino": "^9.6.0",
@@ -44,15 +44,11 @@
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         },
         {
           "target": "portable",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ]
     },
