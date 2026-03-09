@@ -10,6 +10,113 @@ const BM = window.BotManager;
 let contacts = [];
 let logsAutoRefreshTimer = null;
 
+// ── Local Persistence ────────────────────────────────────────
+// Collect all form field values into a single flat object for local storage.
+function collectAllFormValues() {
+    const val = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+    const chk = (id) => { const el = document.getElementById(id); return el ? el.checked : false; };
+
+    return {
+        // Connection panel
+        'vps.host': val('vps-host'),
+        'vps.port': val('vps-port'),
+        'vps.username': val('vps-user'),
+        'vps.password': val('vps-password'),
+        'vps.botDir': val('vps-botdir'),
+        'vps.serviceName': val('vps-service'),
+        // API Keys panel
+        'keys.gemini': getGeminiKeys(),
+        'keys.groq': val('key-groq'),
+        'keys.pollinations': val('key-pollinations'),
+        // Persona panel
+        'persona.prompt': val('persona-prompt'),
+        'persona.name': val('persona-name'),
+        'persona.timezone': val('persona-timezone'),
+        // Keywords panel
+        'kw.trigger': val('kw-trigger'),
+        'kw.autoreply': chk('kw-autoreply'),
+        // Human behavior panel
+        'hb.wpm': val('hb-wpm'),
+        'hb.readMin': val('hb-read-min'),
+        'hb.readMax': val('hb-read-max'),
+        'hb.burstMin': val('hb-burst-min'),
+        'hb.enabled': chk('hb-enabled'),
+        // Groups panel
+        'grp.mentionOnly': chk('grp-mention-only'),
+        'grp.triggerWord': val('grp-trigger-word'),
+        'grp.allowed': val('grp-allowed'),
+        'grp.blocked': val('grp-blocked'),
+        // Model selector
+        'gemini.model': document.querySelector('input[name="gemini-model"]:checked')?.value || 'gemini-2.5-flash',
+        // Contacts (stored as JSON string)
+        'contacts': JSON.stringify(contacts),
+    };
+}
+
+// Restore all form fields from a saved object.
+function restoreAllFormValues(data) {
+    if (!data) return;
+    const setVal = (id, key) => { const el = document.getElementById(id); if (el && data[key]) el.value = data[key]; };
+    const setChk = (id, key) => { const el = document.getElementById(id); if (el && data[key] !== undefined) el.checked = !!data[key]; };
+
+    // Connection
+    setVal('vps-host', 'vps.host');
+    setVal('vps-port', 'vps.port');
+    setVal('vps-user', 'vps.username');
+    setVal('vps-password', 'vps.password');
+    setVal('vps-botdir', 'vps.botDir');
+    setVal('vps-service', 'vps.serviceName');
+    // API Keys — Gemini dynamic rows
+    if (data['keys.gemini']) populateGeminiKeys(data['keys.gemini']);
+    setVal('key-groq', 'keys.groq');
+    setVal('key-pollinations', 'keys.pollinations');
+    // Persona
+    setVal('persona-prompt', 'persona.prompt');
+    setVal('persona-name', 'persona.name');
+    setVal('persona-timezone', 'persona.timezone');
+    // Keywords
+    setVal('kw-trigger', 'kw.trigger');
+    setChk('kw-autoreply', 'kw.autoreply');
+    // Human behavior
+    setVal('hb-wpm', 'hb.wpm');
+    setVal('hb-read-min', 'hb.readMin');
+    setVal('hb-read-max', 'hb.readMax');
+    setVal('hb-burst-min', 'hb.burstMin');
+    setChk('hb-enabled', 'hb.enabled');
+    // Groups
+    setChk('grp-mention-only', 'grp.mentionOnly');
+    setVal('grp-trigger-word', 'grp.triggerWord');
+    setVal('grp-allowed', 'grp.allowed');
+    setVal('grp-blocked', 'grp.blocked');
+    // Model selector
+    if (data['gemini.model']) {
+        const radio = document.querySelector(`input[name="gemini-model"][value="${data['gemini.model']}"]`);
+        if (radio) radio.checked = true;
+    }
+    // Contacts
+    if (data['contacts']) {
+        try { contacts = JSON.parse(data['contacts']); renderContactsTable(); } catch { }
+    }
+}
+
+// Save all current form values to local electron-store
+async function saveToLocalStore() {
+    const values = collectAllFormValues();
+    for (const [key, value] of Object.entries(values)) {
+        await BM.store.set(key, value);
+    }
+    console.log('[LocalStore] Saved all form values');
+}
+
+// Auto-save on window close / app quit
+window.addEventListener('beforeunload', () => {
+    // Fire-and-forget — BM.store.set is async but we don't await
+    const values = collectAllFormValues();
+    for (const [key, value] of Object.entries(values)) {
+        BM.store.set(key, value);
+    }
+});
+
 // ── Utilities ────────────────────────────────────────────────
 function toast(msg, type = 'info') {
     const el = document.createElement('div');
@@ -58,22 +165,39 @@ document.querySelectorAll('.nav-item').forEach(item => {
     });
 });
 
-// ── Auto-import all config from VPS on startup ───────────────
-// Silently pulls env vars + bot config from VPS and pre-fills
-// every panel, so the user never sees empty fields on launch.
-(async function autoLoadFromVPS() {
+// ── Two-phase startup: local store → VPS import ─────────────
+// Phase 1: Instantly restore all form values from local electron-store.
+//          This covers connection creds, API keys, persona, contacts, etc.
+//          Fields are never empty even if VPS is unreachable.
+// Phase 2: Silently fetch latest config from VPS (if reachable) and
+//          refresh all panels. Also saves the updated values back to local store.
+(async function autoStartupLoad() {
+    // Phase 1 — Local store (instant)
+    try {
+        const saved = await BM.store.getAll();
+        if (saved && Object.keys(saved).length > 0) {
+            restoreAllFormValues(saved);
+            console.log('[Startup] Phase 1: Restored from local store');
+        }
+    } catch (e) {
+        console.log('[Startup] Phase 1 skipped:', e.message);
+    }
+
+    // Phase 2 — VPS import (background, updates local store)
     try {
         const result = await BM.vps.importAll();
         if (result?.ok) {
             applyImportedConfig(result);
-            // Keep the import summary card hidden — this was a silent load
             document.getElementById('import-summary-card')?.classList.add('hidden');
-            console.log('[Startup] Auto-imported config from VPS');
+            // Save the refreshed VPS values back to local store
+            await saveToLocalStore();
+            console.log('[Startup] Phase 2: Imported from VPS and saved locally');
         }
     } catch (e) {
-        console.log('[Startup] Auto-import skipped:', e.message);
+        console.log('[Startup] Phase 2 skipped (VPS unreachable):', e.message);
     }
 })();
+
 
 
 // ── Toggle password visibility ───────────────────────────────
@@ -107,6 +231,7 @@ document.getElementById('btn-save-vps')?.addEventListener('click', async () => {
     await BM.store.set('vps.botDir', document.getElementById('vps-botdir').value.trim() || '/root/whatsapp-bot');
     await BM.store.set('vps.serviceName', document.getElementById('vps-service').value.trim() || 'whatsapp-bot');
     toast('✅ Connection settings saved', 'success');
+    saveToLocalStore();
 });
 
 document.getElementById('btn-test-ssh')?.addEventListener('click', async () => {
@@ -171,6 +296,7 @@ document.getElementById('btn-save-persona')?.addEventListener('click', async () 
     if (result.ok) {
         setOutput('persona-output', '✅ Persona saved to VPS\n' + (result.output || ''), 'success');
         toast('✅ Persona saved', 'success');
+        saveToLocalStore();
     } else {
         setOutput('persona-output', '❌ ' + result.error, 'error');
     }
@@ -234,6 +360,7 @@ document.getElementById('btn-load-apikeys')?.addEventListener('click', async () 
         document.getElementById('key-pollinations').value = env['POLLINATIONS_API_KEY'] || '';
         setOutput('apikeys-output', '✅ Loaded from VPS service file', 'success');
         toast('✅ Keys loaded', 'success');
+        saveToLocalStore();
     } else {
         setOutput('apikeys-output', '❌ ' + result.error, 'error');
     }
@@ -246,9 +373,12 @@ document.getElementById('btn-save-apikeys')?.addEventListener('click', async () 
     if (!gemini) { toast('⚠️ At least one Gemini API key is required', 'error'); return; }
 
     const keyCount = gemini.split(',').length;
-    const envVars = { GEMINI_API_KEY: gemini };
-    if (groq) envVars['GROQ_API_KEY'] = groq;
-    if (poll) envVars['POLLINATIONS_API_KEY'] = poll;
+    // Always include all keys — empty string explicitly clears the old value on VPS
+    const envVars = {
+        GEMINI_API_KEY: gemini,
+        GROQ_API_KEY: groq,
+        POLLINATIONS_API_KEY: poll,
+    };
 
     showLoading('btn-save-apikeys', 'Saving & Restarting...');
     const result = await BM.vps.setEnv(envVars);
@@ -256,6 +386,7 @@ document.getElementById('btn-save-apikeys')?.addEventListener('click', async () 
     if (result.ok) {
         setOutput('apikeys-output', `✅ ${keyCount} Gemini key(s) saved to VPS, bot restarted`, 'success');
         toast(`✅ ${keyCount} API key(s) saved — bot restarted`, 'success');
+        saveToLocalStore();
     } else {
         setOutput('apikeys-output', '❌ ' + result.error, 'error');
     }
@@ -355,6 +486,7 @@ document.getElementById('btn-save-contacts')?.addEventListener('click', async ()
     if (result.ok) {
         setOutput('contacts-output', `✅ ${contacts.length} contact(s) saved to VPS`, 'success');
         toast('✅ Contacts saved', 'success');
+        saveToLocalStore();
     } else {
         setOutput('contacts-output', '❌ ' + result.error, 'error');
     }
@@ -384,7 +516,7 @@ document.getElementById('btn-save-keywords')?.addEventListener('click', async ()
         autoReplyEnabled: document.getElementById('kw-autoreply').checked,
     });
     stopLoading('btn-save-keywords');
-    if (result.ok) { setOutput('keywords-output', '✅ Saved to VPS', 'success'); toast('✅ Keywords saved', 'success'); }
+    if (result.ok) { setOutput('keywords-output', '✅ Saved to VPS', 'success'); toast('✅ Keywords saved', 'success'); saveToLocalStore(); }
     else { setOutput('keywords-output', '❌ ' + result.error, 'error'); }
 });
 
@@ -420,7 +552,7 @@ document.getElementById('btn-save-behavior')?.addEventListener('click', async ()
         }
     });
     stopLoading('btn-save-behavior');
-    if (result.ok) { setOutput('behavior-output', '✅ Human Behavior settings saved', 'success'); toast('✅ Saved', 'success'); }
+    if (result.ok) { setOutput('behavior-output', '✅ Human Behavior settings saved', 'success'); toast('✅ Saved', 'success'); saveToLocalStore(); }
     else { setOutput('behavior-output', '❌ ' + result.error, 'error'); }
 });
 
@@ -453,7 +585,7 @@ document.getElementById('btn-save-groups')?.addEventListener('click', async () =
         blockedGroups: parse('grp-blocked'),
     });
     stopLoading('btn-save-groups');
-    if (result.ok) { setOutput('groups-output', '✅ Group settings saved', 'success'); toast('✅ Saved', 'success'); }
+    if (result.ok) { setOutput('groups-output', '✅ Group settings saved', 'success'); toast('✅ Saved', 'success'); saveToLocalStore(); }
     else { setOutput('groups-output', '❌ ' + result.error, 'error'); }
 });
 
