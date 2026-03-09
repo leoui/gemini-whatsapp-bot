@@ -26,6 +26,7 @@ const HumanBehavior = require('./services/humanBehavior');
 const FileManager = require('./services/fileManager');
 const Scheduler = require('./services/scheduler');
 const Router = require('./services/router');
+const HealthCheck = require('./services/healthCheck');
 
 // --- Service Instances ---
 let whatsapp, gemini, groq, calendar, humanBehavior, fileManager;
@@ -100,6 +101,29 @@ async function handleIncomingMessage(msg) {
     let responseResult = null;
 
     try {
+        // === Health Check — whitelisted number only ===
+        if (HealthCheck.isHealthCheckRequest(msg)) {
+            log('info', `[HealthCheck] Request from ${msg.senderName} (${msg.senderJid})`);
+            try {
+                const report = await HealthCheck.generateHealthReport({ whatsapp, gemini, groq });
+                await whatsapp.markRead(msg.key);
+                await whatsapp.sendMessage(msg.remoteJid, report);
+                log('ok', '[HealthCheck] Report sent.');
+            } catch (hcErr) {
+                log('err', `[HealthCheck] Failed: ${hcErr.message}`);
+                await whatsapp.sendMessage(msg.remoteJid, `⚠️ Health check failed: ${hcErr.message}`);
+            }
+            return;
+        }
+
+        // === Silently ignore health check attempts from non-whitelisted numbers ===
+        const _lowerTxt = (msg.text || '').toLowerCase();
+        const _isHealthAttempt = ['/healthcheck', '/health', 'health check', 'healthcheck', 'status bot', 'bot status', 'cek status', 'cek bot'].some(t => _lowerTxt.includes(t));
+        if (_isHealthAttempt) {
+            log('info', `[HealthCheck] Ignored from non-whitelisted ${msg.senderJid}`);
+            return;
+        }
+
         // --- Media handling ---
         let mediaContext = null;
         if (msg.hasMedia && msg.rawMessage) {
