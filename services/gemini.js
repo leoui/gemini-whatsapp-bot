@@ -15,7 +15,13 @@ const fs = require('fs');
 const path = require('path');
 const Config = require('./config');
 
-// Default and fallback models (no gemini-2.5-pro — flash is fast + free)
+// Available Gemini models (shown in Bot Manager model selector)
+const AVAILABLE_MODELS = [
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (fast, free tier)' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (best quality, lower quota)' },
+    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (stable fallback)' },
+];
+
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
 const API_TIMEOUT_MS = 30000;
@@ -41,7 +47,7 @@ class GeminiService {
         if (!this.clients.has(apiKey)) {
             this.clients.set(apiKey, new GoogleGenAI({
                 apiKey,
-                httpOptions: { apiVersion: 'v1' },
+                apiVersion: 'v1',   // top-level in v1.44.0 (was httpOptions.apiVersion in v0.9.0)
             }));
         }
         return this.clients.get(apiKey);
@@ -543,3 +549,4 @@ When the user asks to send a FILE to someone else, use BOTH tags together.
 }
 
 module.exports = GeminiService;
+module.exports.AVAILABLE_MODELS = AVAILABLE_MODELS;
