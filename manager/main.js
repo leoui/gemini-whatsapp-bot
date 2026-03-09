@@ -161,19 +161,25 @@ ipcMain.handle('vps:setEnv', async (_e, envVars) => {
 ipcMain.handle('bot:saveConfig', async (_e, configPatch) => {
     const { botDir } = getVpsConfig();
     try {
-        const escaped = JSON.stringify(JSON.stringify(configPatch));
-        const script = `cd ${botDir} && node -e "
-const Config = require('./services/config');
-const patch = JSON.parse(${escaped});
-Object.entries(patch).forEach(([k, v]) => Config.set(k, v));
-console.log('SAVED:', Object.keys(patch).join(', '));
-"`;
+        // Base64-encode the JSON payload so it survives shell escaping intact.
+        // This handles newlines, quotes, emoji, and any other special chars
+        // that would break an inline node -e "..." command.
+        const b64 = Buffer.from(JSON.stringify(configPatch)).toString('base64');
+        const nodeCmd = [
+            `const Config = require('./services/config');`,
+            `const patch = JSON.parse(Buffer.from('${b64}', 'base64').toString('utf8'));`,
+            `Object.entries(patch).forEach(([k, v]) => Config.set(k, v));`,
+            `console.log('SAVED:', Object.keys(patch).join(', '));`,
+        ].join(' ');
+        const script = `cd ${botDir} && node -e "${nodeCmd}"`;
+
         const result = await sshExec(script);
         return { ok: true, output: result };
     } catch (e) {
         return { ok: false, error: e.message };
     }
 });
+
 
 // Restart the bot service
 ipcMain.handle('vps:restart', async () => {
