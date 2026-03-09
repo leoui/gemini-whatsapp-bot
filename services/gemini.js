@@ -45,10 +45,9 @@ class GeminiService {
      */
     getClient(apiKey) {
         if (!this.clients.has(apiKey)) {
-            this.clients.set(apiKey, new GoogleGenAI({
-                apiKey,
-                apiVersion: 'v1',   // top-level in v1.44.0 (was httpOptions.apiVersion in v0.9.0)
-            }));
+            // Do NOT set apiVersion: 'v1' — the v1 endpoint does not support
+            // systemInstruction in chats.create(). Let SDK use its default (v1beta).
+            this.clients.set(apiKey, new GoogleGenAI({ apiKey }));
         }
         return this.clients.get(apiKey);
     }
