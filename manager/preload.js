@@ -19,10 +19,16 @@ contextBridge.exposeInMainWorld('BotManager', {
         backup: () => ipcRenderer.invoke('vps:backup'),
         logs: (lines) => ipcRenderer.invoke('vps:logs', lines),
         setEnv: (vars) => ipcRenderer.invoke('vps:setEnv', vars),
+        importAll: () => ipcRenderer.invoke('vps:importAll'),
     },
     // Bot config
     bot: {
         readConfig: () => ipcRenderer.invoke('bot:readConfig'),
         saveConfig: (patch) => ipcRenderer.invoke('bot:saveConfig', patch),
     },
+    // App-level actions
+    app: {
+        uninstall: () => ipcRenderer.invoke('app:uninstall'),
+    },
 });
+

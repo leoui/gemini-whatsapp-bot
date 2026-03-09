@@ -1,437 +1,531 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Bot Manager</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="app.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bot Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="app.css" />
 </head>
+
 <body>
-<div id="app">
-  <!-- Traffic lights spacer (macOS hiddenInset) -->
-  <div class="titlebar-drag"></div>
+  <div id="app">
+    <!-- Traffic lights spacer (macOS hiddenInset) -->
+    <div class="titlebar-drag"></div>
 
-  <!-- Sidebar -->
-  <nav id="sidebar">
-    <div class="app-logo">
-      <span class="logo-icon">🤖</span>
-      <span class="logo-text">Bot Manager</span>
-    </div>
-    <div class="nav-section-label">CONFIGURE</div>
-    <ul class="nav-list">
-      <li class="nav-item active" data-panel="connection">
-        <span class="nav-icon">🖥</span>
-        <span>VPS Connection</span>
-      </li>
-      <li class="nav-item" data-panel="persona">
-        <span class="nav-icon">🎭</span>
-        <span>Bot Persona</span>
-      </li>
-      <li class="nav-item" data-panel="apikeys">
-        <span class="nav-icon">🔑</span>
-        <span>API Keys</span>
-      </li>
-      <li class="nav-item" data-panel="contacts">
-        <span class="nav-icon">👥</span>
-        <span>Contacts</span>
-      </li>
-      <li class="nav-item" data-panel="keywords">
-        <span class="nav-icon">💬</span>
-        <span>Keywords</span>
-      </li>
-      <li class="nav-item" data-panel="behavior">
-        <span class="nav-icon">🧠</span>
-        <span>Human Behavior</span>
-      </li>
-      <li class="nav-item" data-panel="groups">
-        <span class="nav-icon">👫</span>
-        <span>Group Behavior</span>
-      </li>
-      <li class="nav-item" data-panel="backup">
-        <span class="nav-icon">☁️</span>
-        <span>Backup</span>
-      </li>
-    </ul>
-    <div class="nav-section-label">MONITOR</div>
-    <ul class="nav-list">
-      <li class="nav-item" data-panel="logs">
-        <span class="nav-icon">📋</span>
-        <span>Live Logs</span>
-      </li>
-      <li class="nav-item" data-panel="status">
-        <span class="nav-icon">📊</span>
-        <span>Bot Status</span>
-      </li>
-    </ul>
-    <!-- VPS status badge -->
-    <div class="sidebar-footer">
-      <div id="vps-badge" class="vps-badge disconnected">⚪ Not connected</div>
-    </div>
-  </nav>
-
-  <!-- Main content -->
-  <main id="content">
-
-    <!-- ===== VPS Connection ===== -->
-    <section id="panel-connection" class="panel active">
-      <div class="panel-header">
-        <h1>VPS Connection</h1>
-        <p class="subtitle">Configure SSH access to your VPS running the bot</p>
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div class="app-logo">
+        <span class="logo-icon">🤖</span>
+        <span class="logo-text">Bot Manager</span>
       </div>
-      <div class="card-grid cols-1">
-        <div class="card">
-          <div class="field-row cols-2">
-            <div class="field">
-              <label>VPS IP / Hostname</label>
-              <input type="text" id="vps-host" placeholder="YOUR_VPS_IP" />
-            </div>
-            <div class="field">
-              <label>SSH Port</label>
-              <input type="number" id="vps-port" value="22" placeholder="22" />
-            </div>
-          </div>
-          <div class="field-row cols-2">
-            <div class="field">
-              <label>Username</label>
-              <input type="text" id="vps-user" placeholder="root" />
-            </div>
-            <div class="field">
-              <label>Password</label>
-              <input type="password" id="vps-password" placeholder="••••••••••" />
-            </div>
-          </div>
-          <div class="field-row cols-2">
-            <div class="field">
-              <label>Bot Directory</label>
-              <input type="text" id="vps-botdir" placeholder="/root/whatsapp-bot" />
-            </div>
-            <div class="field">
-              <label>systemd Service Name</label>
-              <input type="text" id="vps-service" placeholder="whatsapp-bot" />
-            </div>
-          </div>
-          <div class="action-row">
-            <button id="btn-save-vps" class="btn-primary">💾 Save Connection</button>
-            <button id="btn-test-ssh" class="btn-secondary">🔌 Test Connection</button>
-            <button id="btn-restart-bot" class="btn-danger">🔄 Restart Bot</button>
-          </div>
-          <div id="connection-output" class="output-box hidden"></div>
+      <div class="nav-section-label">CONFIGURE</div>
+      <ul class="nav-list">
+        <li class="nav-item active" data-panel="connection">
+          <span class="nav-icon">🖥</span>
+          <span>VPS Connection</span>
+        </li>
+        <li class="nav-item" data-panel="persona">
+          <span class="nav-icon">🎭</span>
+          <span>Bot Persona</span>
+        </li>
+        <li class="nav-item" data-panel="apikeys">
+          <span class="nav-icon">🔑</span>
+          <span>API Keys</span>
+        </li>
+        <li class="nav-item" data-panel="contacts">
+          <span class="nav-icon">👥</span>
+          <span>Contacts</span>
+        </li>
+        <li class="nav-item" data-panel="keywords">
+          <span class="nav-icon">💬</span>
+          <span>Keywords</span>
+        </li>
+        <li class="nav-item" data-panel="behavior">
+          <span class="nav-icon">🧠</span>
+          <span>Human Behavior</span>
+        </li>
+        <li class="nav-item" data-panel="groups">
+          <span class="nav-icon">👫</span>
+          <span>Group Behavior</span>
+        </li>
+        <li class="nav-item" data-panel="backup">
+          <span class="nav-icon">☁️</span>
+          <span>Backup</span>
+        </li>
+        <li class="nav-item" data-panel="import">
+          <span class="nav-icon">📥</span>
+          <span>Import from VPS</span>
+        </li>
+      </ul>
+      <div class="nav-section-label">MONITOR</div>
+      <ul class="nav-list">
+        <li class="nav-item" data-panel="logs">
+          <span class="nav-icon">📋</span>
+          <span>Live Logs</span>
+        </li>
+        <li class="nav-item" data-panel="status">
+          <span class="nav-icon">📊</span>
+          <span>Bot Status</span>
+        </li>
+      </ul>
+      <div class="nav-section-label danger-label">DANGER ZONE</div>
+      <ul class="nav-list">
+        <li class="nav-item nav-danger" data-panel="uninstall">
+          <span class="nav-icon">🗑</span>
+          <span>Uninstall App</span>
+        </li>
+      </ul>
+      <!-- VPS status badge -->
+      <div class="sidebar-footer">
+        <div id="vps-badge" class="vps-badge disconnected">⚪ Not connected</div>
+      </div>
+    </nav>
+
+    <!-- Main content -->
+    <main id="content">
+
+      <!-- ===== VPS Connection ===== -->
+      <section id="panel-connection" class="panel active">
+        <div class="panel-header">
+          <h1>VPS Connection</h1>
+          <p class="subtitle">Configure SSH access to your VPS running the bot</p>
         </div>
-      </div>
-    </section>
-
-    <!-- ===== Bot Persona ===== -->
-    <section id="panel-persona" class="panel">
-      <div class="panel-header">
-        <h1>Bot Persona</h1>
-        <p class="subtitle">Define the bot's personality and character prompt</p>
-      </div>
-      <div class="card-grid cols-1">
-        <div class="card">
-          <div class="field">
-            <label>Character Prompt</label>
-            <p class="field-help">This is the system instruction that shapes how the bot behaves and speaks in every conversation.</p>
-            <textarea id="persona-prompt" rows="10" placeholder="You are a helpful, friendly WhatsApp assistant named Cuy. You love Indonesian culture and respond in a warm, casual tone. Answer in the same language the user uses..."></textarea>
-          </div>
-          <div class="field-row cols-2">
-            <div class="field">
-              <label>Bot Name (display)</label>
-              <input type="text" id="persona-name" placeholder="Cuy" />
+        <div class="card-grid cols-1">
+          <div class="card">
+            <div class="field-row cols-2">
+              <div class="field">
+                <label>VPS IP / Hostname</label>
+                <input type="text" id="vps-host" placeholder="YOUR_VPS_IP" />
+              </div>
+              <div class="field">
+                <label>SSH Port</label>
+                <input type="number" id="vps-port" value="22" placeholder="22" />
+              </div>
             </div>
-            <div class="field">
-              <label>Default Timezone</label>
-              <input type="text" id="persona-timezone" placeholder="Asia/Jakarta" />
+            <div class="field-row cols-2">
+              <div class="field">
+                <label>Username</label>
+                <input type="text" id="vps-user" placeholder="root" />
+              </div>
+              <div class="field">
+                <label>Password</label>
+                <input type="password" id="vps-password" placeholder="••••••••••" />
+              </div>
             </div>
-          </div>
-          <div class="action-row">
-            <button id="btn-save-persona" class="btn-primary">💾 Save Persona</button>
-            <button id="btn-load-persona" class="btn-secondary">📥 Load from VPS</button>
-          </div>
-          <div id="persona-output" class="output-box hidden"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== API Keys ===== -->
-    <section id="panel-apikeys" class="panel">
-      <div class="panel-header">
-        <h1>API Keys</h1>
-        <p class="subtitle">Manage all API keys. Changes are applied to the VPS systemd service.</p>
-      </div>
-      <div class="card-grid cols-1">
-        <div class="card">
-          <div class="field">
-            <label>🤖 Gemini API Keys</label>
-            <p class="field-help">Comma-separated keys for rotation. Free at <a href="https://aistudio.google.com" class="link">aistudio.google.com</a></p>
-            <textarea id="key-gemini" rows="3" placeholder="AIza..., AIza..., AIza..."></textarea>
-          </div>
-          <div class="field">
-            <label>⚡ Groq API Key</label>
-            <p class="field-help">Free simple-chat routing. Get at <a href="https://console.groq.com" class="link">console.groq.com</a></p>
-            <input type="password" id="key-groq" placeholder="gsk_..." />
-            <button class="btn-toggle-vis" data-target="key-groq">👁 Show</button>
-          </div>
-          <div class="field">
-            <label>🖼 Pollinations API Key</label>
-            <p class="field-help">For image generation. Get at <a href="https://enter.pollinations.ai" class="link">enter.pollinations.ai</a></p>
-            <input type="password" id="key-pollinations" placeholder="sk_..." />
-            <button class="btn-toggle-vis" data-target="key-pollinations">👁 Show</button>
-          </div>
-          <div class="action-row">
-            <button id="btn-save-apikeys" class="btn-primary">💾 Save Keys to VPS</button>
-            <button id="btn-load-apikeys" class="btn-secondary">📥 Load from VPS</button>
-          </div>
-          <div id="apikeys-output" class="output-box hidden"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== Contacts ===== -->
-    <section id="panel-contacts" class="panel">
-      <div class="panel-header">
-        <h1>Saved Contacts</h1>
-        <p class="subtitle">Manage contact shortcuts for proactive messaging (e.g. "Send +John hello")</p>
-      </div>
-      <div class="card-grid cols-1">
-        <div class="card">
-          <div class="contacts-table-wrap">
-            <table class="data-table" id="contacts-table">
-              <thead>
-                <tr><th>Name</th><th>Shortcode</th><th>Phone</th><th></th></tr>
-              </thead>
-              <tbody id="contacts-body"></tbody>
-            </table>
-          </div>
-          <div class="card add-contact-form">
-            <h3>Add / Edit Contact</h3>
-            <div class="field-row cols-3">
-              <div class="field"><label>Name</label><input type="text" id="contact-name" placeholder="John Doe" /></div>
-              <div class="field"><label>Shortcode</label><input type="text" id="contact-shortcode" placeholder="+John" /></div>
-              <div class="field"><label>Phone (with country code)</label><input type="text" id="contact-phone" placeholder="628123456789" /></div>
+            <div class="field-row cols-2">
+              <div class="field">
+                <label>Bot Directory</label>
+                <input type="text" id="vps-botdir" placeholder="/root/whatsapp-bot" />
+              </div>
+              <div class="field">
+                <label>systemd Service Name</label>
+                <input type="text" id="vps-service" placeholder="whatsapp-bot" />
+              </div>
             </div>
-          </div>
-          <div class="action-row">
-            <button id="btn-add-contact" class="btn-primary">➕ Add Contact</button>
-            <button id="btn-save-contacts" class="btn-secondary">💾 Save to VPS</button>
-            <button id="btn-load-contacts" class="btn-ghost">📥 Load from VPS</button>
-          </div>
-          <div id="contacts-output" class="output-box hidden"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== Keywords ===== -->
-    <section id="panel-keywords" class="panel">
-      <div class="panel-header">
-        <h1>Bot Keywords & Triggers</h1>
-        <p class="subtitle">Control when the bot responds and what triggers it in groups</p>
-      </div>
-      <div class="card-grid cols-1">
-        <div class="card">
-          <div class="field">
-            <label>Group Trigger Word</label>
-            <p class="field-help">In groups with "mention-only" mode, this word also triggers the bot even without @mention.</p>
-            <input type="text" id="kw-trigger" placeholder="!cuy" />
-          </div>
-          <div class="field">
-            <label>Auto-Reply Enabled</label>
-            <div class="toggle-row">
-              <label class="toggle-switch">
-                <input type="checkbox" id="kw-autoreply" checked />
-                <span class="toggle-slider"></span>
-              </label>
-              <span class="toggle-label">Bot responds to messages automatically</span>
+            <div class="action-row">
+              <button id="btn-save-vps" class="btn-primary">💾 Save Connection</button>
+              <button id="btn-test-ssh" class="btn-secondary">🔌 Test Connection</button>
+              <button id="btn-restart-bot" class="btn-danger">🔄 Restart Bot</button>
             </div>
-          </div>
-          <div class="action-row">
-            <button id="btn-save-keywords" class="btn-primary">💾 Save to VPS</button>
-            <button id="btn-load-keywords" class="btn-secondary">📥 Load from VPS</button>
-          </div>
-          <div id="keywords-output" class="output-box hidden"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== Human Behavior ===== -->
-    <section id="panel-behavior" class="panel">
-      <div class="panel-header">
-        <h1>Human Behavior Engine</h1>
-        <p class="subtitle">Simulate human-like typing delays to make the bot feel more natural</p>
-      </div>
-      <div class="card-grid cols-1">
-        <div class="card">
-          <div class="field-row cols-2">
-            <div class="field">
-              <label>Typing Speed (WPM)</label>
-              <input type="number" id="hb-wpm" placeholder="120" min="40" max="400" />
-              <p class="field-help">Words per minute (40–400). Lower = slower typing.</p>
-            </div>
-            <div class="field">
-              <label>Min Read Delay (ms)</label>
-              <input type="number" id="hb-read-min" placeholder="500" min="0" max="5000" />
-            </div>
-          </div>
-          <div class="field-row cols-2">
-            <div class="field">
-              <label>Max Read Delay (ms)</label>
-              <input type="number" id="hb-read-max" placeholder="2000" min="0" max="10000" />
-            </div>
-            <div class="field">
-              <label>Min Burst Pause (ms)</label>
-              <input type="number" id="hb-burst-min" placeholder="2000" min="0" max="30000" />
-              <p class="field-help">Pause between bursts of messages sent to the same chat.</p>
-            </div>
-          </div>
-          <div class="field">
-            <label>Human Behavior Engine Enabled</label>
-            <div class="toggle-row">
-              <label class="toggle-switch">
-                <input type="checkbox" id="hb-enabled" checked />
-                <span class="toggle-slider"></span>
-              </label>
-              <span class="toggle-label">Use typing indicators and realistic delays</span>
-            </div>
-          </div>
-          <div class="action-row">
-            <button id="btn-save-behavior" class="btn-primary">💾 Save to VPS</button>
-            <button id="btn-load-behavior" class="btn-secondary">📥 Load from VPS</button>
-          </div>
-          <div id="behavior-output" class="output-box hidden"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== Group Behavior ===== -->
-    <section id="panel-groups" class="panel">
-      <div class="panel-header">
-        <h1>Group Behavior</h1>
-        <p class="subtitle">Control how the bot behaves inside WhatsApp group chats</p>
-      </div>
-      <div class="card-grid cols-1">
-        <div class="card">
-          <div class="field">
-            <label>Mention-Only Mode</label>
-            <div class="toggle-row">
-              <label class="toggle-switch">
-                <input type="checkbox" id="grp-mention-only" />
-                <span class="toggle-slider"></span>
-              </label>
-              <span class="toggle-label">Bot only responds when @mentioned in groups</span>
-            </div>
-          </div>
-          <div class="field">
-            <label>Group Trigger Word</label>
-            <p class="field-help">Optional alternative — bot responds if this word is included (even without @mention).</p>
-            <input type="text" id="grp-trigger-word" placeholder="!bot" />
-          </div>
-          <div class="field">
-            <label>Allowed Groups (JIDs)</label>
-            <p class="field-help">Comma-separated WhatsApp group JIDs. Leave empty to allow all groups.</p>
-            <textarea id="grp-allowed" rows="3" placeholder="120363182645662013@g.us, 120363044765762325@g.us"></textarea>
-          </div>
-          <div class="field">
-            <label>Blocked Groups (JIDs)</label>
-            <textarea id="grp-blocked" rows="2" placeholder=""></textarea>
-          </div>
-          <div class="action-row">
-            <button id="btn-save-groups" class="btn-primary">💾 Save to VPS</button>
-            <button id="btn-load-groups" class="btn-secondary">📥 Load from VPS</button>
-          </div>
-          <div id="groups-output" class="output-box hidden"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== Backup ===== -->
-    <section id="panel-backup" class="panel">
-      <div class="panel-header">
-        <h1>Backup</h1>
-        <p class="subtitle">Create VPS backups and optionally upload to Google Drive</p>
-      </div>
-      <div class="card-grid cols-1">
-        <div class="card">
-          <h3>VPS Backup</h3>
-          <p class="field-help">Creates a <code>.tar.gz</code> of the bot directory (excluding session and node_modules) on the VPS.</p>
-          <div class="action-row">
-            <button id="btn-take-backup" class="btn-primary">📦 Take Backup Now</button>
-          </div>
-          <div id="backup-vps-output" class="output-box hidden"></div>
-        </div>
-        <div class="card">
-          <h3>☁️ Google Drive Backup</h3>
-          <p class="field-help">Sign in with Google to automatically upload backups to your Google Drive. Uses OAuth 2.0 — your credentials are never stored on the VPS.</p>
-          <div id="gdrive-status" class="gdrive-status">
-            <span id="gdrive-user-text">Not connected to Google Drive</span>
-          </div>
-          <div class="action-row">
-            <button id="btn-gdrive-login" class="btn-google">
-              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G" class="google-icon" />
-              Sign in with Google
-            </button>
-            <button id="btn-gdrive-logout" class="btn-ghost hidden">Sign out</button>
-          </div>
-          <div class="field" id="gdrive-folder-field" style="display:none">
-            <label>Google Drive Folder ID (optional)</label>
-            <input type="text" id="gdrive-folder-id" placeholder="Leave empty to use root" />
-          </div>
-          <div class="action-row" id="gdrive-upload-row" style="display:none">
-            <button id="btn-gdrive-upload" class="btn-primary">☁️ Upload Latest Backup</button>
-          </div>
-          <div id="backup-drive-output" class="output-box hidden"></div>
-          <div class="info-box">
-            <strong>ℹ️ How it works:</strong> The backup is created on your VPS, then downloaded to this Mac via SSH, then uploaded to your Google Drive — all in one click.
+            <div id="connection-output" class="output-box hidden"></div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- ===== Live Logs ===== -->
-    <section id="panel-logs" class="panel">
-      <div class="panel-header">
-        <h1>Live Logs</h1>
-        <p class="subtitle">Real-time bot journal from the VPS</p>
-      </div>
-      <div class="card-grid cols-1">
-        <div class="card" style="padding:0; overflow:hidden;">
-          <div class="logs-toolbar">
-            <button id="btn-refresh-logs" class="btn-secondary small">🔄 Refresh</button>
-            <button id="btn-auto-refresh" class="btn-ghost small">▶ Auto (5s)</button>
-            <select id="logs-lines">
-              <option value="50">Last 50 lines</option>
-              <option value="100">Last 100 lines</option>
-              <option value="200">Last 200 lines</option>
-            </select>
-          </div>
-          <pre id="logs-output" class="logs-pre">Click Refresh to load logs...</pre>
+      <!-- ===== Bot Persona ===== -->
+      <section id="panel-persona" class="panel">
+        <div class="panel-header">
+          <h1>Bot Persona</h1>
+          <p class="subtitle">Define the bot's personality and character prompt</p>
         </div>
-      </div>
-    </section>
-
-    <!-- ===== Bot Status ===== -->
-    <section id="panel-status" class="panel">
-      <div class="panel-header">
-        <h1>Bot Status</h1>
-        <p class="subtitle">Live metrics from your VPS</p>
-      </div>
-      <div class="card-grid cols-1">
-        <div class="card">
-          <div class="action-row">
-            <button id="btn-refresh-status" class="btn-secondary">🔄 Refresh Status</button>
+        <div class="card-grid cols-1">
+          <div class="card">
+            <div class="field">
+              <label>Character Prompt</label>
+              <p class="field-help">This is the system instruction that shapes how the bot behaves and speaks in every
+                conversation.</p>
+              <textarea id="persona-prompt" rows="10"
+                placeholder="You are a helpful, friendly WhatsApp assistant named Cuy. You love Indonesian culture and respond in a warm, casual tone. Answer in the same language the user uses..."></textarea>
+            </div>
+            <div class="field-row cols-2">
+              <div class="field">
+                <label>Bot Name (display)</label>
+                <input type="text" id="persona-name" placeholder="Cuy" />
+              </div>
+              <div class="field">
+                <label>Default Timezone</label>
+                <input type="text" id="persona-timezone" placeholder="Asia/Jakarta" />
+              </div>
+            </div>
+            <div class="action-row">
+              <button id="btn-save-persona" class="btn-primary">💾 Save Persona</button>
+              <button id="btn-load-persona" class="btn-secondary">📥 Load from VPS</button>
+            </div>
+            <div id="persona-output" class="output-box hidden"></div>
           </div>
-          <pre id="status-output" class="output-box" style="display:block; margin-top:16px;">Click Refresh to load status...</pre>
         </div>
-      </div>
-    </section>
+      </section>
 
-  </main>
-</div>
+      <!-- ===== API Keys ===== -->
+      <section id="panel-apikeys" class="panel">
+        <div class="panel-header">
+          <h1>API Keys</h1>
+          <p class="subtitle">Manage all API keys. Changes are applied to the VPS systemd service.</p>
+        </div>
+        <div class="card-grid cols-1">
+          <div class="card">
+            <div class="field">
+              <label>🤖 Gemini API Keys</label>
+              <p class="field-help">Comma-separated keys for rotation. Free at <a href="https://aistudio.google.com"
+                  class="link">aistudio.google.com</a></p>
+              <textarea id="key-gemini" rows="3" placeholder="AIza..., AIza..., AIza..."></textarea>
+            </div>
+            <div class="field">
+              <label>⚡ Groq API Key</label>
+              <p class="field-help">Free simple-chat routing. Get at <a href="https://console.groq.com"
+                  class="link">console.groq.com</a></p>
+              <input type="password" id="key-groq" placeholder="gsk_..." />
+              <button class="btn-toggle-vis" data-target="key-groq">👁 Show</button>
+            </div>
+            <div class="field">
+              <label>🖼 Pollinations API Key</label>
+              <p class="field-help">For image generation. Get at <a href="https://enter.pollinations.ai"
+                  class="link">enter.pollinations.ai</a></p>
+              <input type="password" id="key-pollinations" placeholder="sk_..." />
+              <button class="btn-toggle-vis" data-target="key-pollinations">👁 Show</button>
+            </div>
+            <div class="action-row">
+              <button id="btn-save-apikeys" class="btn-primary">💾 Save Keys to VPS</button>
+              <button id="btn-load-apikeys" class="btn-secondary">📥 Load from VPS</button>
+            </div>
+            <div id="apikeys-output" class="output-box hidden"></div>
+          </div>
+        </div>
+      </section>
 
-<!-- Toast notifications -->
-<div id="toast-container"></div>
+      <!-- ===== Contacts ===== -->
+      <section id="panel-contacts" class="panel">
+        <div class="panel-header">
+          <h1>Saved Contacts</h1>
+          <p class="subtitle">Manage contact shortcuts for proactive messaging (e.g. "Send +John hello")</p>
+        </div>
+        <div class="card-grid cols-1">
+          <div class="card">
+            <div class="contacts-table-wrap">
+              <table class="data-table" id="contacts-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Shortcode</th>
+                    <th>Phone</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="contacts-body"></tbody>
+              </table>
+            </div>
+            <div class="card add-contact-form">
+              <h3>Add / Edit Contact</h3>
+              <div class="field-row cols-3">
+                <div class="field"><label>Name</label><input type="text" id="contact-name" placeholder="John Doe" />
+                </div>
+                <div class="field"><label>Shortcode</label><input type="text" id="contact-shortcode"
+                    placeholder="+John" /></div>
+                <div class="field"><label>Phone (with country code)</label><input type="text" id="contact-phone"
+                    placeholder="628123456789" /></div>
+              </div>
+            </div>
+            <div class="action-row">
+              <button id="btn-add-contact" class="btn-primary">➕ Add Contact</button>
+              <button id="btn-save-contacts" class="btn-secondary">💾 Save to VPS</button>
+              <button id="btn-load-contacts" class="btn-ghost">📥 Load from VPS</button>
+            </div>
+            <div id="contacts-output" class="output-box hidden"></div>
+          </div>
+        </div>
+      </section>
 
-<script src="app.js"></script>
+      <!-- ===== Keywords ===== -->
+      <section id="panel-keywords" class="panel">
+        <div class="panel-header">
+          <h1>Bot Keywords & Triggers</h1>
+          <p class="subtitle">Control when the bot responds and what triggers it in groups</p>
+        </div>
+        <div class="card-grid cols-1">
+          <div class="card">
+            <div class="field">
+              <label>Group Trigger Word</label>
+              <p class="field-help">In groups with "mention-only" mode, this word also triggers the bot even without
+                @mention.</p>
+              <input type="text" id="kw-trigger" placeholder="!cuy" />
+            </div>
+            <div class="field">
+              <label>Auto-Reply Enabled</label>
+              <div class="toggle-row">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="kw-autoreply" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span class="toggle-label">Bot responds to messages automatically</span>
+              </div>
+            </div>
+            <div class="action-row">
+              <button id="btn-save-keywords" class="btn-primary">💾 Save to VPS</button>
+              <button id="btn-load-keywords" class="btn-secondary">📥 Load from VPS</button>
+            </div>
+            <div id="keywords-output" class="output-box hidden"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Human Behavior ===== -->
+      <section id="panel-behavior" class="panel">
+        <div class="panel-header">
+          <h1>Human Behavior Engine</h1>
+          <p class="subtitle">Simulate human-like typing delays to make the bot feel more natural</p>
+        </div>
+        <div class="card-grid cols-1">
+          <div class="card">
+            <div class="field-row cols-2">
+              <div class="field">
+                <label>Typing Speed (WPM)</label>
+                <input type="number" id="hb-wpm" placeholder="120" min="40" max="400" />
+                <p class="field-help">Words per minute (40–400). Lower = slower typing.</p>
+              </div>
+              <div class="field">
+                <label>Min Read Delay (ms)</label>
+                <input type="number" id="hb-read-min" placeholder="500" min="0" max="5000" />
+              </div>
+            </div>
+            <div class="field-row cols-2">
+              <div class="field">
+                <label>Max Read Delay (ms)</label>
+                <input type="number" id="hb-read-max" placeholder="2000" min="0" max="10000" />
+              </div>
+              <div class="field">
+                <label>Min Burst Pause (ms)</label>
+                <input type="number" id="hb-burst-min" placeholder="2000" min="0" max="30000" />
+                <p class="field-help">Pause between bursts of messages sent to the same chat.</p>
+              </div>
+            </div>
+            <div class="field">
+              <label>Human Behavior Engine Enabled</label>
+              <div class="toggle-row">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="hb-enabled" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span class="toggle-label">Use typing indicators and realistic delays</span>
+              </div>
+            </div>
+            <div class="action-row">
+              <button id="btn-save-behavior" class="btn-primary">💾 Save to VPS</button>
+              <button id="btn-load-behavior" class="btn-secondary">📥 Load from VPS</button>
+            </div>
+            <div id="behavior-output" class="output-box hidden"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Group Behavior ===== -->
+      <section id="panel-groups" class="panel">
+        <div class="panel-header">
+          <h1>Group Behavior</h1>
+          <p class="subtitle">Control how the bot behaves inside WhatsApp group chats</p>
+        </div>
+        <div class="card-grid cols-1">
+          <div class="card">
+            <div class="field">
+              <label>Mention-Only Mode</label>
+              <div class="toggle-row">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="grp-mention-only" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span class="toggle-label">Bot only responds when @mentioned in groups</span>
+              </div>
+            </div>
+            <div class="field">
+              <label>Group Trigger Word</label>
+              <p class="field-help">Optional alternative — bot responds if this word is included (even without
+                @mention).</p>
+              <input type="text" id="grp-trigger-word" placeholder="!bot" />
+            </div>
+            <div class="field">
+              <label>Allowed Groups (JIDs)</label>
+              <p class="field-help">Comma-separated WhatsApp group JIDs. Leave empty to allow all groups.</p>
+              <textarea id="grp-allowed" rows="3"
+                placeholder="120363182645662013@g.us, 120363044765762325@g.us"></textarea>
+            </div>
+            <div class="field">
+              <label>Blocked Groups (JIDs)</label>
+              <textarea id="grp-blocked" rows="2" placeholder=""></textarea>
+            </div>
+            <div class="action-row">
+              <button id="btn-save-groups" class="btn-primary">💾 Save to VPS</button>
+              <button id="btn-load-groups" class="btn-secondary">📥 Load from VPS</button>
+            </div>
+            <div id="groups-output" class="output-box hidden"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Backup ===== -->
+      <section id="panel-backup" class="panel">
+        <div class="panel-header">
+          <h1>Backup</h1>
+          <p class="subtitle">Create VPS backups and optionally upload to Google Drive</p>
+        </div>
+        <div class="card-grid cols-1">
+          <div class="card">
+            <h3>VPS Backup</h3>
+            <p class="field-help">Creates a <code>.tar.gz</code> of the bot directory (excluding session and
+              node_modules) on the VPS.</p>
+            <div class="action-row">
+              <button id="btn-take-backup" class="btn-primary">📦 Take Backup Now</button>
+            </div>
+            <div id="backup-vps-output" class="output-box hidden"></div>
+          </div>
+          <div class="card">
+            <h3>☁️ Google Drive Backup</h3>
+            <p class="field-help">Sign in with Google to automatically upload backups to your Google Drive. Uses OAuth
+              2.0 — your credentials are never stored on the VPS.</p>
+            <div id="gdrive-status" class="gdrive-status">
+              <span id="gdrive-user-text">Not connected to Google Drive</span>
+            </div>
+            <div class="action-row">
+              <button id="btn-gdrive-login" class="btn-google">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G"
+                  class="google-icon" />
+                Sign in with Google
+              </button>
+              <button id="btn-gdrive-logout" class="btn-ghost hidden">Sign out</button>
+            </div>
+            <div class="field" id="gdrive-folder-field" style="display:none">
+              <label>Google Drive Folder ID (optional)</label>
+              <input type="text" id="gdrive-folder-id" placeholder="Leave empty to use root" />
+            </div>
+            <div class="action-row" id="gdrive-upload-row" style="display:none">
+              <button id="btn-gdrive-upload" class="btn-primary">☁️ Upload Latest Backup</button>
+            </div>
+            <div id="backup-drive-output" class="output-box hidden"></div>
+            <div class="info-box">
+              <strong>ℹ️ How it works:</strong> The backup is created on your VPS, then downloaded to this Mac via SSH,
+              then uploaded to your Google Drive — all in one click.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Live Logs ===== -->
+      <section id="panel-logs" class="panel">
+        <div class="panel-header">
+          <h1>Live Logs</h1>
+          <p class="subtitle">Real-time bot journal from the VPS</p>
+        </div>
+        <div class="card-grid cols-1">
+          <div class="card" style="padding:0; overflow:hidden;">
+            <div class="logs-toolbar">
+              <button id="btn-refresh-logs" class="btn-secondary small">🔄 Refresh</button>
+              <button id="btn-auto-refresh" class="btn-ghost small">▶ Auto (5s)</button>
+              <select id="logs-lines">
+                <option value="50">Last 50 lines</option>
+                <option value="100">Last 100 lines</option>
+                <option value="200">Last 200 lines</option>
+              </select>
+            </div>
+            <pre id="logs-output" class="logs-pre">Click Refresh to load logs...</pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Bot Status ===== -->
+      <section id="panel-status" class="panel">
+        <div class="panel-header">
+          <h1>Bot Status</h1>
+          <p class="subtitle">Live metrics from your VPS</p>
+        </div>
+        <div class="card-grid cols-1">
+          <div class="card">
+            <div class="action-row">
+              <button id="btn-refresh-status" class="btn-secondary">🔄 Refresh Status</button>
+            </div>
+            <pre id="status-output" class="output-box"
+              style="display:block; margin-top:16px;">Click Refresh to load status...</pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Import from VPS ===== -->
+      <section id="panel-import" class="panel">
+        <div class="panel-header">
+          <h1>Import Settings from VPS</h1>
+          <p class="subtitle">Fetch all existing configuration from your live VPS and auto-fill every panel in this app.
+            Perfect for first-time setup after your bot is already running.</p>
+        </div>
+        <div class="card-grid cols-1">
+          <div class="card">
+            <div class="info-box" style="margin-bottom:20px;">
+              <strong>ℹ️ How it works</strong><br />
+              Connects to your VPS via SSH and reads the <code>systemd</code> service file (for API keys) and the bot's
+              config JSON (for persona, contacts, behavior). All fields across all panels are filled automatically —
+              nothing is saved until you click Save in each panel.
+            </div>
+            <div class="action-row">
+              <button id="btn-import-vps" class="btn-primary">📥 Import All Settings from VPS</button>
+            </div>
+            <div id="import-output" class="output-box hidden"></div>
+          </div>
+          <div id="import-summary-card" class="card hidden">
+            <h3>✅ Import Summary</h3>
+            <p class="field-help" style="margin-bottom:16px;">The following settings were imported. Go to each panel to
+              review and save them to the VPS.</p>
+            <div id="import-summary" class="import-summary"></div>
+            <div class="info-box" style="margin-top:16px;">
+              <strong>📝 Next step:</strong> All fields are now pre-filled. Visit each panel (Persona, API Keys,
+              Contacts, etc.) to review and save your settings.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Uninstall ===== -->
+      <section id="panel-uninstall" class="panel">
+        <div class="panel-header">
+          <h1>Uninstall App</h1>
+          <p class="subtitle">Completely remove Bot Manager from this Mac</p>
+        </div>
+        <div class="card-grid cols-1">
+          <div class="card danger-card">
+            <h3>⚠️ Uninstall Bot Manager</h3>
+            <p class="field-help" style="margin-bottom:12px;">This action will permanently:</p>
+            <ul class="danger-list">
+              <li>🔑 Delete all saved VPS credentials and settings stored on this Mac</li>
+              <li>🗑 Move the Bot Manager app to Trash</li>
+              <li>🧹 Clear all app cache and preferences</li>
+            </ul>
+            <div class="danger-note">
+              <strong>Your VPS bot is NOT affected.</strong> The bot will keep running on your server — only this macOS
+              app is removed.
+            </div>
+            <div class="action-row" style="margin-top:24px;">
+              <button id="btn-uninstall" class="btn-uninstall">🗑 Uninstall Bot Manager</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Toast notifications -->
+  <div id="toast-container"></div>
+
+  <script src="app.js"></script>
 </body>
+
 </html>

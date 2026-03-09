@@ -230,3 +230,101 @@ ipcMain.handle('vps:logs', async (_e, lines = 50) => {
         return { ok: false, error: e.message };
     }
 });
+
+// ────────────────────────────────────────────────────────────
+// IPC: Import ALL config from VPS (one-shot onboarding import)
+// ────────────────────────────────────────────────────────────
+ipcMain.handle('vps:importAll', async () => {
+    const { botDir, serviceName } = getVpsConfig();
+    try {
+        // Run a comprehensive read in a single SSH session
+        const raw = await sshExec(
+            `echo '===SERVICE==='; cat /etc/systemd/system/${serviceName}.service 2>/dev/null || echo '';` +
+            `echo '===BOTCONFIG==='; cat /root/.gemini-whatsapp-bot-config.json 2>/dev/null || echo '{}';` +
+            `echo '===NODE==='; node --version;` +
+            `echo '===UPTIME==='; uptime -p;` +
+            `echo '===MEM==='; free -m | awk 'NR==2{print $3"/"$2}';`
+        );
+
+        // Split sections
+        const section = (tag) => {
+            const re = new RegExp(`===\\${tag}===([\\s\\S]*?)(?====|$)`);
+            const m = raw.match(new RegExp(`===${tag}===([\\s\\S]*?)(?====|$)`));
+            return m ? m[1].trim() : '';
+        };
+
+        // Parse env vars from systemd service file
+        const serviceText = section('SERVICE');
+        const envVars = {};
+        (serviceText.match(/^Environment=(.+)$/gm) || []).forEach(line => {
+            const [k, ...rest] = line.replace('Environment=', '').split('=');
+            envVars[k] = rest.join('=');
+        });
+
+        // Parse bot JSON config
+        let botConfig = {};
+        try { botConfig = JSON.parse(section('BOTCONFIG') || '{}'); } catch { }
+
+        return {
+            ok: true,
+            envVars,
+            botConfig,
+            meta: {
+                nodeVersion: section('NODE'),
+                uptime: section('UPTIME'),
+                memory: section('MEM'),
+            },
+        };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
+// ────────────────────────────────────────────────────────────
+// IPC: Uninstall the app from macOS
+// ────────────────────────────────────────────────────────────
+ipcMain.handle('app:uninstall', async () => {
+    const choice = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        buttons: ['Cancel', 'Uninstall'],
+        defaultId: 0,
+        cancelId: 0,
+        title: 'Uninstall Bot Manager',
+        message: 'Are you sure you want to uninstall Bot Manager?',
+        detail: 'This will:\n• Delete all saved VPS credentials and settings\n• Move the Bot Manager app to Trash\n\nYour VPS bot and its configuration will NOT be affected.',
+    });
+    if (choice.response !== 1) return { ok: false, cancelled: true };
+
+    try {
+        // 1. Clear all local config
+        store.clear();
+
+        // 2. Find the .app bundle path
+        // process.execPath = /Applications/Bot Manager.app/Contents/MacOS/Bot Manager
+        let appPath = process.execPath;
+        // Walk up until we find the .app bundle
+        while (appPath && !appPath.endsWith('.app')) {
+            const parent = path.dirname(appPath);
+            if (parent === appPath) break; // reached root
+            appPath = parent;
+        }
+
+        // 3. Move .app to Trash
+        if (appPath && appPath.endsWith('.app')) {
+            await shell.trashItem(appPath);
+        }
+
+        // 4. Also clear Electron userData (preferences, cache)
+        const userDataPath = app.getPath('userData');
+        const fs = require('fs');
+        try {
+            fs.rmSync(userDataPath, { recursive: true, force: true });
+        } catch { }
+
+        // 5. Quit
+        setTimeout(() => app.quit(), 500);
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});

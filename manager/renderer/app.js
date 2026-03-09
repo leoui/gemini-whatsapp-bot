@@ -429,6 +429,108 @@ document.getElementById('btn-refresh-status')?.addEventListener('click', async (
 });
 
 // ═══════════════════════════════════════════════════════════
+// PANEL: Import from VPS (onboarding — auto-fills all panels)
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Apply an importAll result to every panel's fields.
+ * Called after a successful vps:importAll.
+ */
+function applyImportedConfig(result) {
+    const { envVars = {}, botConfig = {}, meta = {} } = result;
+
+    // --- API Keys panel ---
+    if (envVars['GEMINI_API_KEY']) document.getElementById('key-gemini').value = envVars['GEMINI_API_KEY'];
+    if (envVars['GROQ_API_KEY']) document.getElementById('key-groq').value = envVars['GROQ_API_KEY'];
+    if (envVars['POLLINATIONS_API_KEY']) document.getElementById('key-pollinations').value = envVars['POLLINATIONS_API_KEY'];
+
+    // --- Persona panel ---
+    if (botConfig.characterPrompt) document.getElementById('persona-prompt').value = botConfig.characterPrompt;
+    if (botConfig.botName) document.getElementById('persona-name').value = botConfig.botName;
+    if (botConfig.timezone || envVars['TZ']) document.getElementById('persona-timezone').value = botConfig.timezone || envVars['TZ'] || 'Asia/Jakarta';
+
+    // --- Keywords panel ---
+    if (botConfig.groupTriggerWord !== undefined) document.getElementById('kw-trigger').value = botConfig.groupTriggerWord;
+    if (botConfig.autoReplyEnabled !== undefined) document.getElementById('kw-autoreply').checked = botConfig.autoReplyEnabled !== false;
+
+    // --- Human Behavior panel ---
+    const hb = botConfig.humanBehavior || {};
+    if (hb.typingWpm) document.getElementById('hb-wpm').value = hb.typingWpm;
+    if (hb.readDelayMin !== undefined) document.getElementById('hb-read-min').value = hb.readDelayMin;
+    if (hb.readDelayMax !== undefined) document.getElementById('hb-read-max').value = hb.readDelayMax;
+    if (hb.burstPauseMin !== undefined) document.getElementById('hb-burst-min').value = hb.burstPauseMin;
+    if (hb.enabled !== undefined) document.getElementById('hb-enabled').checked = hb.enabled !== false;
+
+    // --- Group Behavior panel ---
+    if (botConfig.groupMentionOnly !== undefined) document.getElementById('grp-mention-only').checked = !!botConfig.groupMentionOnly;
+    if (botConfig.groupTriggerWord) document.getElementById('grp-trigger-word').value = botConfig.groupTriggerWord;
+    if (botConfig.allowedGroups) document.getElementById('grp-allowed').value = (botConfig.allowedGroups || []).join(', ');
+    if (botConfig.blockedGroups) document.getElementById('grp-blocked').value = (botConfig.blockedGroups || []).join(', ');
+
+    // --- Contacts ---
+    if (Array.isArray(botConfig.savedContacts)) {
+        contacts = botConfig.savedContacts;
+        renderContactsTable();
+    }
+
+    // --- Build summary cards ---
+    const summaryEl = document.getElementById('import-summary');
+    const items = [
+        { label: 'Gemini API Keys', value: envVars['GEMINI_API_KEY'] ? `${envVars['GEMINI_API_KEY'].split(',').length} key(s)` : null },
+        { label: 'Groq API Key', value: envVars['GROQ_API_KEY'] ? '✅ Configured' : null },
+        { label: 'Pollinations Key', value: envVars['POLLINATIONS_API_KEY'] ? '✅ Configured' : null },
+        { label: 'Bot Name', value: botConfig.botName || null },
+        { label: 'Persona', value: botConfig.characterPrompt ? `${botConfig.characterPrompt.substring(0, 60)}…` : null },
+        { label: 'Timezone', value: botConfig.timezone || envVars['TZ'] || null },
+        { label: 'Contacts', value: (botConfig.savedContacts || []).length > 0 ? `${botConfig.savedContacts.length} saved` : null },
+        { label: 'Human Behavior', value: botConfig.humanBehavior ? '✅ Configured' : null },
+        { label: 'Group Mode', value: botConfig.groupMentionOnly ? 'Mention-only' : 'All messages' },
+        { label: 'Health Check Whitelist', value: envVars['HEALTH_CHECK_WHITELIST'] ? `${envVars['HEALTH_CHECK_WHITELIST'].split(',').length} number(s)` : null },
+        { label: 'Node.js (VPS)', value: meta.nodeVersion || null },
+        { label: 'Memory (VPS)', value: meta.memory ? `${meta.memory} MB` : null },
+    ];
+
+    summaryEl.innerHTML = items.map(item => {
+        const hasValue = item.value !== null && item.value !== undefined && item.value !== '';
+        return `<div class="import-item ${hasValue ? 'ok' : 'empty'}">
+            <div class="import-item-label">${item.label}</div>
+            <div class="import-item-value">${hasValue ? item.value : 'Not configured'}</div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('import-summary-card').classList.remove('hidden');
+}
+
+document.getElementById('btn-import-vps')?.addEventListener('click', async () => {
+    showLoading('btn-import-vps', '⏳ Importing...');
+    setOutput('import-output', 'Connecting to VPS and reading all configuration…', '');
+
+    const result = await BM.vps.importAll();
+    stopLoading('btn-import-vps');
+
+    if (result.ok) {
+        setOutput('import-output', '✅ Import successful! All panels have been pre-filled.', 'success');
+        applyImportedConfig(result);
+        toast('✅ Settings imported from VPS — check each panel to review', 'success');
+    } else {
+        setOutput('import-output', '❌ Import failed:\n' + result.error, 'error');
+        toast('❌ Import failed: ' + result.error, 'error');
+    }
+});
+
+// ═══════════════════════════════════════════════════════════
+// PANEL: Uninstall
+// ═══════════════════════════════════════════════════════════
+document.getElementById('btn-uninstall')?.addEventListener('click', async () => {
+    const result = await BM.app.uninstall();
+    if (result.cancelled) return;
+    if (!result.ok) {
+        toast('❌ Uninstall failed: ' + result.error, 'error');
+    }
+    // App will quit automatically if uninstall succeeded
+});
+
+// ═══════════════════════════════════════════════════════════
 // Init
 // ═══════════════════════════════════════════════════════════
 (async function init() {
@@ -440,3 +542,4 @@ document.getElementById('btn-refresh-status')?.addEventListener('click', async (
         setBadge(result.ok ? 'connected' : 'error');
     }
 })();
+
