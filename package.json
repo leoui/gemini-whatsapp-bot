@@ -1,6 +1,6 @@
 {
   "name": "gemini-whatsapp-bot",
-  "version": "2.0.0",
+  "version": "2.1.1",
   "description": "WhatsApp AI assistant powered by Google Gemini (complex tasks) and Groq/Llama (simple chat). Image generation, file creation, reminders, scheduling, and more.",
   "main": "main.js",
   "scripts": {
