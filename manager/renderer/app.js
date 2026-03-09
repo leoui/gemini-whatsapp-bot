@@ -198,6 +198,44 @@ document.getElementById('btn-save-apikeys')?.addEventListener('click', async () 
     }
 });
 
+// ─── Gemini Model Selector ────────────────────────────────────────────────────
+
+async function loadCurrentModel() {
+    const result = await BM.bot.getModel();
+    const modelId = result?.model || 'gemini-2.5-flash';
+    const radios = document.querySelectorAll('input[name="gemini-model"]');
+    radios.forEach(r => { r.checked = (r.value === modelId); });
+}
+
+// Load selected model when API Keys panel is shown
+document.addEventListener('DOMContentLoaded', () => {
+    const observer = new MutationObserver(() => {
+        if (document.getElementById('panel-apikeys')?.classList.contains('active')) {
+            loadCurrentModel();
+        }
+    });
+    const panels = document.getElementById('panel-apikeys');
+    if (panels) observer.observe(panels, { attributes: true, attributeFilter: ['class'] });
+});
+
+document.getElementById('btn-save-model')?.addEventListener('click', async () => {
+    const selected = document.querySelector('input[name="gemini-model"]:checked')?.value;
+    if (!selected) { toast('⚠️ Select a model first', 'error'); return; }
+
+    showLoading('btn-save-model', 'Saving…');
+    const result = await BM.bot.setModel(selected);
+    stopLoading('btn-save-model');
+
+    if (result.ok) {
+        const label = selected === 'gemini-2.5-pro' ? 'Gemini 2.5 Pro 🌟' : 'Gemini 2.5 Flash ⚡';
+        setOutput('model-output', `✅ Model set to ${label} — takes effect on next message`, 'success');
+        toast(`✅ Model: ${label}`, 'success');
+    } else {
+        setOutput('model-output', '❌ ' + result.error, 'error');
+        toast('❌ ' + result.error, 'error');
+    }
+});
+
 // ═══════════════════════════════════════════════════════════
 // PANEL: Contacts
 // ═══════════════════════════════════════════════════════════

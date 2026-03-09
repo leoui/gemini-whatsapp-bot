@@ -323,6 +323,48 @@ ipcMain.handle('bot:readConfig', async () => {
 });
 
 // ────────────────────────────────────────────────────────────
+// IPC: Gemini model selection
+// ────────────────────────────────────────────────────────────
+
+ipcMain.handle('bot:getModel', async () => {
+    const { botDir } = getVpsConfig();
+    try {
+        const configPath = `${botDir}/../.gemini-whatsapp-bot-config.json`;
+        const raw = await sshExec(`cat ${configPath} 2>/dev/null || echo "{}"`);
+        let cfg = {};
+        try { cfg = JSON.parse(raw || '{}'); } catch { }
+        return { ok: true, model: cfg.geminiModel || 'gemini-2.5-flash' };
+    } catch (e) {
+        return { ok: false, error: e.message, model: 'gemini-2.5-flash' };
+    }
+});
+
+ipcMain.handle('bot:setModel', async (_e, modelId) => {
+    const { botDir } = getVpsConfig();
+    const ALLOWED = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'];
+    if (!ALLOWED.includes(modelId)) {
+        return { ok: false, error: `Unknown model: ${modelId}` };
+    }
+    try {
+        const configPath = `${botDir}/../.gemini-whatsapp-bot-config.json`;
+        // Read → patch geminiModel → write back
+        const pyScript = `
+import json, os
+p = '${configPath}'
+c = json.load(open(p)) if os.path.exists(p) else {}
+c['geminiModel'] = '${modelId}'
+json.dump(c, open(p, 'w'), indent=2)
+print('OK')
+`.trim();
+        const result = await sshExec(`python3 -c "${pyScript.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`);
+        if (!result.includes('OK')) throw new Error('Python update failed: ' + result);
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
+// ────────────────────────────────────────────────────────────
 // IPC: Save individual config sections to VPS
 // ────────────────────────────────────────────────────────────
 

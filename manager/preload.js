@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('BotManager', {
     bot: {
         readConfig: () => ipcRenderer.invoke('bot:readConfig'),
         saveConfig: (patch) => ipcRenderer.invoke('bot:saveConfig', patch),
+        getModel: () => ipcRenderer.invoke('bot:getModel'),
+        setModel: (modelId) => ipcRenderer.invoke('bot:setModel', modelId),
     },
     // Native dialogs
     dialog: {

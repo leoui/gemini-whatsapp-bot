@@ -210,6 +210,38 @@
             </div>
             <div id="apikeys-output" class="output-box hidden"></div>
           </div>
+
+          <!-- Model Selector -->
+          <div class="card">
+            <h3>🧠 Gemini Model</h3>
+            <p class="field-help">Choose which Gemini model powers the bot. The selected model is saved to the VPS
+              config and takes effect immediately (no restart needed).</p>
+            <div class="model-selector">
+              <label class="model-option" id="model-opt-flash">
+                <input type="radio" name="gemini-model" value="gemini-2.5-flash" checked />
+                <div class="model-card">
+                  <div class="model-badge flash">⚡ Flash</div>
+                  <div class="model-name">Gemini 2.5 Flash</div>
+                  <div class="model-desc">Fast · Free tier · ~500 req/day per key<br />Best for most conversations and
+                    tasks</div>
+                </div>
+              </label>
+              <label class="model-option" id="model-opt-pro">
+                <input type="radio" name="gemini-model" value="gemini-2.5-pro" />
+                <div class="model-card">
+                  <div class="model-badge pro">🌟 Pro</div>
+                  <div class="model-name">Gemini 2.5 Pro</div>
+                  <div class="model-desc">Best quality · Thinking mode · Lower quota<br />For complex analysis and
+                    reasoning</div>
+                </div>
+              </label>
+            </div>
+            <div class="action-row" style="margin-top:16px;">
+              <button id="btn-save-model" class="btn-primary">💾 Save Model to VPS</button>
+            </div>
+            <div id="model-output" class="output-box hidden"></div>
+          </div>
+
         </div>
       </section>
 
