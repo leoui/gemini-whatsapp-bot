@@ -598,7 +598,37 @@
             <pre id="logs-output" class="logs-pre">Click Refresh to load logs...</pre>
           </div>
         </div>
+
+        <!-- Reconnect card -->
+        <div class="card-grid cols-1">
+          <div class="card reconnect-card">
+            <div class="reconnect-header">
+              <div>
+                <h3 style="margin:0 0 4px;">🔄 Reconnect WhatsApp</h3>
+                <p class="field-help" style="margin:0;">Stops the bot, clears the session credentials, waits 120 seconds
+                  for WhatsApp servers to release the old session, then restarts. Use this when the bot is stuck or
+                  disconnected.</p>
+              </div>
+              <button id="btn-reconnect" class="btn-danger">🔄 Reconnect</button>
+            </div>
+
+            <!-- Countdown (hidden until countdown fires) -->
+            <div id="reconnect-countdown-wrap" class="hidden" style="margin-top:14px;">
+              <div class="reconnect-countdown-bar">
+                <span id="reconnect-countdown-label">⏳ Session cooldown: <strong
+                    id="reconnect-countdown-secs">120</strong>s remaining</span>
+                <div class="reconnect-progress-track">
+                  <div id="reconnect-progress-fill" class="reconnect-progress-fill"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Streaming output -->
+            <pre id="reconnect-output" class="logs-pre hidden" style="margin-top:14px; max-height:260px;"></pre>
+          </div>
+        </div>
       </section>
+
 
       <!-- ===== Bot Status ===== -->
       <section id="panel-status" class="panel">

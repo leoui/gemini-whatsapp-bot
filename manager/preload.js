@@ -23,6 +23,14 @@ contextBridge.exposeInMainWorld('BotManager', {
         importAll: () => ipcRenderer.invoke('vps:importAll'),
         changeNumber: () => ipcRenderer.invoke('vps:changeNumber'),
         pollQR: () => ipcRenderer.invoke('vps:pollQR'),
+        reconnect: () => ipcRenderer.send('vps:reconnect'),
+    },
+    // Reconnect streaming event listeners
+    onReconnect: {
+        start: (cb) => ipcRenderer.on('reconnect:start', (_e) => cb()),
+        update: (cb) => ipcRenderer.on('reconnect:update', (_e, line) => cb(line)),
+        countdown: (cb) => ipcRenderer.on('reconnect:countdown', (_e, secs) => cb(secs)),
+        done: (cb) => ipcRenderer.on('reconnect:done', (_e) => cb()),
     },
     // Bot config
     bot: {

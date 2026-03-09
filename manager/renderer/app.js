@@ -556,6 +556,77 @@ document.getElementById('btn-auto-refresh')?.addEventListener('click', (e) => {
     }
 });
 
+// ─── Reconnect WhatsApp ────────────────────────────────────────────────────────
+
+let _reconnectListenersRegistered = false;
+let _countdownInterval = null;
+
+function initReconnectListeners() {
+    if (_reconnectListenersRegistered || !window.BotManager?.onReconnect) return;
+    _reconnectListenersRegistered = true;
+    const BM = window.BotManager;
+
+    BM.onReconnect.start(() => {
+        const out = document.getElementById('reconnect-output');
+        if (out) { out.textContent = ''; out.classList.remove('hidden'); }
+        const wrap = document.getElementById('reconnect-countdown-wrap');
+        if (wrap) wrap.classList.add('hidden');
+        const btn = document.getElementById('btn-reconnect');
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ Running…'; }
+    });
+
+    BM.onReconnect.update((line) => {
+        const out = document.getElementById('reconnect-output');
+        if (!out) return;
+        out.textContent += line + '\n';
+        out.scrollTop = out.scrollHeight;
+    });
+
+    BM.onReconnect.countdown((totalSecs) => {
+        const wrap = document.getElementById('reconnect-countdown-wrap');
+        const secsEl = document.getElementById('reconnect-countdown-secs');
+        const fill = document.getElementById('reconnect-progress-fill');
+        if (!wrap || !secsEl || !fill) return;
+
+        wrap.classList.remove('hidden');
+        let remaining = totalSecs;
+        fill.style.width = '100%';
+
+        if (_countdownInterval) clearInterval(_countdownInterval);
+        _countdownInterval = setInterval(() => {
+            remaining--;
+            if (remaining <= 0) {
+                clearInterval(_countdownInterval);
+                secsEl.textContent = '0';
+                fill.style.width = '0%';
+                wrap.classList.add('hidden');
+                return;
+            }
+            secsEl.textContent = remaining;
+            fill.style.width = `${Math.round((remaining / totalSecs) * 100)}%`;
+        }, 1000);
+    });
+
+    BM.onReconnect.done(() => {
+        if (_countdownInterval) { clearInterval(_countdownInterval); _countdownInterval = null; }
+        const wrap = document.getElementById('reconnect-countdown-wrap');
+        if (wrap) wrap.classList.add('hidden');
+        const btn = document.getElementById('btn-reconnect');
+        if (btn) { btn.disabled = false; btn.textContent = '🔄 Reconnect'; }
+        const out = document.getElementById('reconnect-output');
+        if (out) out.textContent += '\n✅ Done.\n';
+        toast('✅ Reconnect sequence complete — check QR panel if needed', 'success');
+    });
+}
+
+document.getElementById('btn-reconnect')?.addEventListener('click', () => {
+    if (!window.BotManager?.vps?.reconnect) {
+        toast('❌ BotManager not ready', 'error'); return;
+    }
+    initReconnectListeners();
+    window.BotManager.vps.reconnect();
+});
+
 // ═══════════════════════════════════════════════════════════
 // PANEL: Bot Status — visual dashboard
 // ═══════════════════════════════════════════════════════════

@@ -430,6 +430,91 @@ ipcMain.handle('vps:restart', async () => {
 });
 
 // ────────────────────────────────────────────────────────────
+// IPC: Reconnect — wipe session + 120s cooldown + restart
+// Uses ipcMain.on (not handle) so we push streaming progress
+// events back to the renderer during the long wait.
+// ────────────────────────────────────────────────────────────
+ipcMain.on('vps:reconnect', async (event) => {
+    const { serviceName } = getVpsConfig();
+
+    // Helper: run one SSH command and stream its output line-by-line
+    function pushStep(label, commands) {
+        return new Promise((resolve) => {
+            const cfg = getVpsConfig();
+            const conn = new SshClient();
+            const script = Array.isArray(commands) ? commands.join(' && ') : commands;
+
+            event.sender.send('reconnect:update', `\n⏳ ${label}`);
+
+            conn.on('ready', () => {
+                conn.exec(script, (err, stream) => {
+                    if (err) {
+                        event.sender.send('reconnect:update', `❌ ${err.message}`);
+                        conn.end();
+                        return resolve();
+                    }
+                    stream.stdout.on('data', d => {
+                        const lines = d.toString().split('\n').filter(l => l.trim());
+                        lines.forEach(l => event.sender.send('reconnect:update', `  ${l}`));
+                    });
+                    stream.stderr.on('data', d => {
+                        const lines = d.toString().split('\n').filter(l => l.trim());
+                        lines.forEach(l => event.sender.send('reconnect:update', `  [err] ${l}`));
+                    });
+                    stream.on('close', () => { conn.end(); resolve(); });
+                });
+            })
+                .on('error', e => {
+                    event.sender.send('reconnect:update', `❌ SSH error: ${e.message}`);
+                    resolve();
+                })
+                .connect({
+                    host: cfg.host, port: cfg.port,
+                    username: cfg.username, password: cfg.password,
+                    readyTimeout: 15000,
+                });
+        });
+    }
+
+    try {
+        event.sender.send('reconnect:start');
+
+        // Step 1 — Stop bot
+        await pushStep('Stopping the bot service…', `systemctl stop ${serviceName}`);
+        event.sender.send('reconnect:update', '✅ Bot stopped');
+
+        // Step 2 — Wipe session files only (not the full directory)
+        await pushStep('Clearing WhatsApp session credentials…', [
+            'rm -f ~/.whatsapp-bot-session/creds.json',
+            'rm -f ~/.whatsapp-bot-session/pre-key-*.json',
+            'rm -f ~/.whatsapp-bot-session/session-*.json',
+            'rm -f ~/.whatsapp-bot-session/app-state-sync-key-*.json',
+            'echo "Session files cleared"',
+        ]);
+        event.sender.send('reconnect:update', '✅ Session cleared');
+
+        // Step 3 — 120-second cooldown (server-side sleep so reconnect is clean)
+        event.sender.send('reconnect:update', '\n⏳ Waiting 120s for WhatsApp servers to release the session…');
+        event.sender.send('reconnect:countdown', 120);
+        await pushStep('Cooldown (120 seconds)…', 'sleep 120 && echo "Cooldown complete"');
+        event.sender.send('reconnect:update', '✅ Cooldown complete');
+
+        // Step 4 — Start bot
+        await pushStep('Starting the bot service…', `systemctl start ${serviceName}`);
+        event.sender.send('reconnect:update', '✅ Bot started');
+
+        // Step 5 — Tail journal briefly to show boot lines / QR
+        event.sender.send('reconnect:update', '\n📋 Recent logs:');
+        await pushStep('Fetching boot logs…', `sleep 3 && journalctl -u ${serviceName} -n 20 --no-pager --output=short 2>/dev/null | grep -v "^--"`);
+
+        event.sender.send('reconnect:done');
+    } catch (err) {
+        event.sender.send('reconnect:update', `\n❌ Reconnect failed: ${err.message}`);
+        event.sender.send('reconnect:done');
+    }
+});
+
+// ────────────────────────────────────────────────────────────
 // IPC: Change WhatsApp Account (wipe session → new QR code)
 // ────────────────────────────────────────────────────────────
 ipcMain.handle('vps:changeNumber', async () => {
