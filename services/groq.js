@@ -74,7 +74,7 @@ class GroqService {
         }
 
         const characterPrompt = Config.get('characterPrompt') ||
-            'You are a friendly, helpful WhatsApp assistant. Keep responses concise and natural. Answer in the same language the user writes in.';
+            'You are a friendly, casual WhatsApp assistant. Use the same language as the user. Be genuine, warm, and natural — like texting a friend.';
 
         // Compute GMT+7 explicitly (no TZ env dependency)
         const nowUtc = new Date();
@@ -83,13 +83,18 @@ class GroqService {
         const WIB_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const WIB_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         const dateTimeStr = `${WIB_DAYS[wib.getUTCDay()]}, ${WIB_MONTHS[wib.getUTCMonth()]} ${wib.getUTCDate()}, ${wib.getUTCFullYear()}, ${pad(wib.getUTCHours())}:${pad(wib.getUTCMinutes())}:${pad(wib.getUTCSeconds())} WIB (UTC+7)`;
-        const dateTimeContext = `\n\n=== CURRENT DATE & TIME ===\nRight now: ${dateTimeStr}\nIMPORTANT: When asked about the date or time, use this exact value. Do NOT say you cannot show real-time time — you CAN, and this is it.\n`;
+        const dateTimeContext = `\n\n=== CURRENT DATE & TIME ===\nRight now: ${dateTimeStr}\nWhen asked about the date or time, state this exactly. Do NOT say you cannot show real-time time.\n`;
+
+        // IMPORTANT: persona MUST come first and be the dominant instruction.
+        // Do NOT append instructions that tell the model to be brief or conservative —
+        // those will override the character prompt and make responses feel cold/robotic.
+        const systemContent = characterPrompt + dateTimeContext;
 
         const history = this.getHistory(chatId);
         const messages = [
             {
                 role: 'system',
-                content: characterPrompt + dateTimeContext + '\n\nIMPORTANT: You handle simple conversational messages. For file creation, image generation, reminders, or scheduling, respond naturally.',
+                content: systemContent,
             },
             ...history,
             {
@@ -102,8 +107,8 @@ class GroqService {
             const completion = await this.client.chat.completions.create({
                 model: this.model,
                 messages,
-                max_tokens: 512,
-                temperature: 0.7,
+                max_tokens: 1024,  // was 512 — allows full casual/expressive replies
+                temperature: 0.85, // was 0.7  — more personality, less robotic
             });
 
             const responseText = completion.choices?.[0]?.message?.content || '';

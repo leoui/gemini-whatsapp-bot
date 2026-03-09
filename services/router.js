@@ -22,6 +22,12 @@ const COMPLEX_KEYWORDS = [
     'buatin gambar', 'buatkan gambar', 'bikin gambar', 'buat gambar',
     'generate gambar', 'gambarin', 'fotoin', 'bikinin foto', 'bikinin gambar',
     'boleh bikin foto', 'bisa bikin foto', 'boleh bikin gambar', 'bisa bikin gambar',
+    // Humor & jokes — ALWAYS Gemini (better personality/expression than Groq)
+    'joke', 'jokes', 'lelucon', 'lawak', 'lucu', 'bercanda', 'becanda',
+    'cerita lucu', 'ceritain lelucon', 'bikin jokes', 'buat jokes',
+    'cerita dong', 'ceritain dong', 'humor', 'roast', 'bikin ketawa',
+    'kocak', 'ngakak', 'gokil', 'absurd', 'jenaka',
+    'buat cerita', 'cerita tentang', 'bikin cerita',
     // Reminders & scheduling — ALWAYS Gemini (needs scheduler + task context)
     'reminder', 'remind me', 'ingatkan', 'ingetin', 'schedule', 'jadwal',
     'jadwalkan', 'atur jadwal', 'set reminder', 'set alarm',
