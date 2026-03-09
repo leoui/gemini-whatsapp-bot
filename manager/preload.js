@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('BotManager', {
         logs: (lines) => ipcRenderer.invoke('vps:logs', lines),
         setEnv: (vars) => ipcRenderer.invoke('vps:setEnv', vars),
         importAll: () => ipcRenderer.invoke('vps:importAll'),
+        changeNumber: () => ipcRenderer.invoke('vps:changeNumber'),
+        pollQR: () => ipcRenderer.invoke('vps:pollQR'),
     },
     // Bot config
     bot: {

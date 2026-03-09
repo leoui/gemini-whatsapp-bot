@@ -779,6 +779,127 @@ document.getElementById('btn-uninstall')?.addEventListener('click', async () => 
 });
 
 // ═══════════════════════════════════════════════════════════
+// PANEL: WhatsApp Number — change account + QR scan
+// ═══════════════════════════════════════════════════════════
+let qrPollTimer = null;
+let lastQrData = null;
+let qrExpireTimer = null;
+
+function showQRPlaceholder(msg) {
+    document.getElementById('qr-placeholder').classList.remove('hidden');
+    document.getElementById('qr-result').classList.add('hidden');
+    if (msg) {
+        document.getElementById('qr-placeholder').querySelector('.qr-placeholder-text').innerHTML =
+            msg + '<br /><span style="font-size:11px;color:var(--text-muted);">Waiting for QR from VPS…</span>';
+    }
+}
+
+function showQRCanvas(data, logLines) {
+    const canvas = document.getElementById('qr-canvas');
+    try {
+        // Use global QRCode from qrcode.js CDN
+        QRCode.toCanvas(canvas, data, {
+            width: 260,
+            margin: 2,
+            color: { dark: '#000000', light: '#ffffff' },
+        });
+        document.getElementById('qr-placeholder').classList.add('hidden');
+        document.getElementById('qr-result').classList.remove('hidden');
+        // 60-second QR expiry countdown
+        clearTimeout(qrExpireTimer);
+        let secs = 60;
+        const expEl = document.getElementById('qr-expires-txt');
+        expEl.innerHTML = `<span class="qr-scanning-pulse"></span> Expires in ${secs}s — scan now with WhatsApp`;
+        qrExpireTimer = setInterval(() => {
+            secs--;
+            if (secs <= 0) {
+                clearInterval(qrExpireTimer);
+                expEl.textContent = '⏰ QR expired — refreshing…';
+                doQRPoll(); // auto-refresh on expire
+            } else {
+                expEl.innerHTML = `<span class="qr-scanning-pulse"></span> Expires in ${secs}s — scan now with WhatsApp`;
+            }
+        }, 1000);
+    } catch (e) {
+        showQRPlaceholder('⚠️ Could not render QR: ' + e.message);
+    }
+
+    if (logLines) {
+        const logEl = document.getElementById('qr-log-tail');
+        logEl.textContent = logLines;
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+}
+
+async function doQRPoll() {
+    const result = await BM.vps.pollQR();
+    if (result.rawLogs) {
+        document.getElementById('qr-log-tail').textContent = result.rawLogs;
+    }
+    if (result.ok && result.qrData && result.qrData !== lastQrData) {
+        lastQrData = result.qrData;
+        showQRCanvas(result.qrData, result.rawLogs);
+    } else if (!result.qrData) {
+        // No QR yet — keep placeholder updated
+        const logEl = document.getElementById('qr-log-tail');
+        if (result.rawLogs) logEl.textContent = result.rawLogs;
+    }
+}
+
+function startQRPolling() {
+    if (qrPollTimer) clearInterval(qrPollTimer);
+    lastQrData = null;
+    document.getElementById('btn-stop-qr').classList.remove('hidden');
+    document.getElementById('btn-poll-qr').classList.add('hidden');
+    showQRPlaceholder('\uD83D\uDD04 Polling VPS for QR code…');
+    doQRPoll(); // immediate first poll
+    qrPollTimer = setInterval(doQRPoll, 5000);
+    toast('🔍 Polling VPS for QR code every 5s…', 'info');
+}
+
+function stopQRPolling() {
+    if (qrPollTimer) { clearInterval(qrPollTimer); qrPollTimer = null; }
+    document.getElementById('btn-stop-qr').classList.add('hidden');
+    document.getElementById('btn-poll-qr').classList.remove('hidden');
+}
+
+document.getElementById('btn-change-number')?.addEventListener('click', async () => {
+    const confirmed = confirm(
+        '⚠️ Change WhatsApp Account\n\n' +
+        'This will:\n' +
+        '  1. Stop the bot\n' +
+        '  2. Delete the WhatsApp session on your VPS\n' +
+        '  3. Restart the bot (new QR will be generated)\n\n' +
+        'The currently linked number will be disconnected.\n\n' +
+        'Continue?'
+    );
+    if (!confirmed) return;
+
+    showLoading('btn-change-number', '⏳ Clearing session…');
+    setOutput('change-number-output', '🔄 Stopping bot and clearing WhatsApp session on VPS…', '');
+    const result = await BM.vps.changeNumber();
+    stopLoading('btn-change-number');
+
+    if (result.ok) {
+        setOutput('change-number-output',
+            '✅ Session cleared! Bot is restarting.\n📷 Scan the QR code below to link a new WhatsApp number.', 'success');
+        toast('✅ Session cleared — starting QR poll', 'success');
+        // Auto-start QR polling
+        startQRPolling();
+    } else {
+        setOutput('change-number-output', '❌ Failed: ' + result.error, 'error');
+        toast('❌ Failed: ' + result.error, 'error');
+    }
+});
+
+document.getElementById('btn-poll-qr')?.addEventListener('click', startQRPolling);
+document.getElementById('btn-stop-qr')?.addEventListener('click', () => {
+    stopQRPolling();
+    toast('⏹ QR polling stopped', 'info');
+});
+document.getElementById('btn-refresh-qr')?.addEventListener('click', doQRPoll);
+
+// ═══════════════════════════════════════════════════════════
 // Init
 // ═══════════════════════════════════════════════════════════
 (async function init() {

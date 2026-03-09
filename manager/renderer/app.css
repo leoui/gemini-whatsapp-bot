@@ -864,6 +864,49 @@ code {
   animation: fadeIn 0.15s ease;
 }
 
+/* ===== QR CODE PANEL ===== */
+.qr-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.qr-placeholder-icon {
+  font-size: 40px;
+  opacity: 0.4;
+}
+
+.qr-placeholder-text {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+#qr-canvas {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  background: #fff;
+  padding: 12px;
+}
+
+.qr-scanning-pulse {
+  animation: pulse-green 1.5s ease-in-out infinite;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+
 
 /* ===== BOT STATUS DASHBOARD ===== */
 

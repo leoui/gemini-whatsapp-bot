@@ -9,6 +9,10 @@ const Store = require('electron-store');
 const { Client: SshClient } = require('ssh2');
 const fs = require('fs');
 const os = require('os');
+const http = require('http');
+const https = require('https');
+const net = require('net');
+
 
 const store = new Store({ name: 'bot-manager-config' });
 
@@ -383,7 +387,89 @@ ipcMain.handle('vps:restart', async () => {
     }
 });
 
-// Fetch live bot status
+// ────────────────────────────────────────────────────────────
+// IPC: Change WhatsApp Account (wipe session → new QR code)
+// ────────────────────────────────────────────────────────────
+ipcMain.handle('vps:changeNumber', async () => {
+    const { serviceName } = getVpsConfig();
+    try {
+        await sshExec([
+            // Stop the bot
+            `systemctl stop ${serviceName}`,
+            'sleep 1',
+            // Wipe the Baileys session directory (auth credentials)
+            'rm -rf /root/.whatsapp-bot-session || true',
+            'rm -rf /root/whatsapp-bot/auth_info_baileys || true',
+            'rm -rf /root/whatsapp-bot/sessions || true',
+            // Restart — bot will generate a new QR on next startup
+            `systemctl start ${serviceName}`,
+            'sleep 3',
+            `systemctl is-active ${serviceName}`,
+        ]);
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
+// ────────────────────────────────────────────────────────────
+// IPC: Poll journal for QR code lines (called repeatedly by renderer)
+// Bot logs QR as: [QR] <qr-data-string>  or  QR code:  or  QR received
+// We return the raw QR string so the renderer can render it with qrcode.js
+// ────────────────────────────────────────────────────────────
+ipcMain.handle('vps:pollQR', async () => {
+    const { serviceName } = getVpsConfig();
+    try {
+        // Get last 80 log lines and extract any QR block
+        const logs = await sshExec(
+            `journalctl -u ${serviceName} -n 80 --no-pager --output=short-iso 2>/dev/null`
+        );
+
+        // Baileys logs QR data as a multi-line ASCII art block AND/OR as:
+        //   "QR:" followed by the raw data string on the next line
+        // We look for the base64-looking QR data after known markers
+        const lines = logs.split('\n');
+        let qrData = null;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            // Match patterns used by @whiskeysockets/baileys:
+            // "QR code:" or "[QR]" or "scan QR" followed by the data
+            if (/qr\s*code|qr\s*received|\[qr\]|scan.*qr/i.test(line)) {
+                // The actual QR string is often on the same line after a colon
+                const colonIdx = line.lastIndexOf(':');
+                if (colonIdx !== -1) {
+                    const candidate = line.substring(colonIdx + 1).trim();
+                    if (candidate.length > 20) { qrData = candidate; break; }
+                }
+                // Or on the very next line
+                if (i + 1 < lines.length) {
+                    const next = lines[i + 1].replace(/^.*\]\s*/, '').trim();
+                    if (next.length > 20) { qrData = next; break; }
+                }
+            }
+        }
+
+        // Also check for lines that only contain QR-looking data
+        // (long alphanumeric+comma+@ strings characteristic of Baileys QR)
+        if (!qrData) {
+            for (const line of lines.slice().reverse()) {
+                const stripped = line.replace(/^[^]]*\]\s*/, '').trim();
+                // Baileys QR strings contain commas, digits, letters — typically 50-200 chars
+                if (/^[\w,@./+=-]{50,}$/.test(stripped)) {
+                    qrData = stripped;
+                    break;
+                }
+            }
+        }
+
+        return { ok: true, qrData, rawLogs: lines.slice(-30).join('\n') };
+    } catch (e) {
+        return { ok: false, error: e.message, qrData: null };
+    }
+});
+
+
 ipcMain.handle('vps:status', async () => {
     const { serviceName, botDir } = getVpsConfig();
     try {
@@ -578,7 +664,6 @@ ipcMain.handle('app:uninstall', async () => {
 
         // 4. Also clear Electron userData (preferences, cache)
         const userDataPath = app.getPath('userData');
-        const fs = require('fs');
         try {
             fs.rmSync(userDataPath, { recursive: true, force: true });
         } catch { }
@@ -595,11 +680,7 @@ ipcMain.handle('app:uninstall', async () => {
 // Uses loopback redirect: http://127.0.0.1:PORT
 // All done with built-in Node modules — no googleapis dep needed.
 // ────────────────────────────────────────────────────────────
-const http = require('http');
-const https = require('https');
-const net = require('net');
-const fs = require('fs');
-const os = require('os');
+// (http, https, net, fs, os already required at top of file)
 
 const GDRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const GDRIVE_TOKEN_KEY = 'gdrive.tokens';

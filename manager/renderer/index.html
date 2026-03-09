@@ -9,6 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="app.css" />
+  <!-- QR code renderer (pure JS, no dependencies) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
 </head>
 
 <body>
@@ -63,6 +65,10 @@
       </ul>
       <div class="nav-section-label">MONITOR</div>
       <ul class="nav-list">
+        <li class="nav-item" data-panel="whatsapp">
+          <span class="nav-icon">📱</span>
+          <span>WhatsApp Number</span>
+        </li>
         <li class="nav-item" data-panel="logs">
           <span class="nav-icon">📋</span>
           <span>Live Logs</span>
@@ -468,6 +474,72 @@
             <div class="info-box" style="margin-top:16px;">
               <strong>ℹ️ How it works:</strong> Takes a VPS backup → downloads it to your Mac via SFTP → uploads to
               Google Drive. Your VPS credentials never touch Google's servers.
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ===== WhatsApp Number ===== -->
+      <section id="panel-whatsapp" class="panel">
+        <div class="panel-header">
+          <h1>WhatsApp Number</h1>
+          <p class="subtitle">Change the linked WhatsApp account and scan a new QR code</p>
+        </div>
+        <div class="card-grid cols-1">
+
+          <!-- Change number card -->
+          <div class="card">
+            <h3>📱 Change WhatsApp Account</h3>
+            <p class="field-help">This will <strong>stop the bot</strong>, clear the WhatsApp session on the VPS
+              (auth credentials only — not your bot config), then restart it. You will need to scan a new
+              QR code with the WhatsApp account you want to link.</p>
+            <div class="danger-note" style="margin-bottom:16px;">
+              ⚠️ The currently linked WhatsApp account will be <strong>disconnected</strong>.
+              This is required if you want to switch to a different phone number.
+            </div>
+            <div class="action-row">
+              <button id="btn-change-number" class="btn-danger">🔄 Change WhatsApp Number</button>
+            </div>
+            <div id="change-number-output" class="output-box hidden"></div>
+          </div>
+
+          <!-- QR code display card -->
+          <div class="card" id="qr-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <h3 style="margin:0;">📷 Scan QR Code</h3>
+              <div style="display:flex;gap:8px;">
+                <button id="btn-poll-qr" class="btn-secondary">🔍 Check for QR</button>
+                <button id="btn-stop-qr" class="btn-ghost small hidden">⏸ Stop</button>
+              </div>
+            </div>
+            <p class="field-help">After clicking <strong>Change WhatsApp Number</strong>, the bot will automatically
+              appear here once it generates a QR code. Or click <strong>Check for QR</strong> to poll manually.
+              Scan it with WhatsApp → Linked Devices → Link a Device.</p>
+
+            <!-- Placeholder when no QR yet -->
+            <div id="qr-placeholder" class="qr-placeholder">
+              <div class="qr-placeholder-icon">📱</div>
+              <div class="qr-placeholder-text">QR code will appear here<br /><span
+                  style="font-size:11px;color:var(--text-muted);">Start a number change or click Check for QR</span>
+              </div>
+            </div>
+
+            <!-- Canvas where QR renders -->
+            <div id="qr-result" class="hidden" style="text-align:center;">
+              <canvas id="qr-canvas" style="border-radius:12px;max-width:260px;"></canvas>
+              <div style="margin-top:12px;font-size:12px;color:var(--text-muted);" id="qr-expires-txt"></div>
+              <div class="action-row" style="justify-content:center;margin-top:12px;">
+                <button id="btn-refresh-qr" class="btn-secondary small">🔄 Refresh QR</button>
+              </div>
+            </div>
+
+            <!-- Raw log tail below QR -->
+            <div style="margin-top:16px;">
+              <div class="logs-toolbar" style="border-top:1px solid var(--border);">
+                <span style="font-size:11px;font-weight:600;color:var(--text-muted);">📋 RECENT BOT LOG</span>
+              </div>
+              <pre id="qr-log-tail" class="status-log-tail" style="max-height:140px;"></pre>
             </div>
           </div>
 
