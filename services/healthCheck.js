@@ -3,6 +3,11 @@
 /**
  * HealthCheckService — Responds to /healthcheck from whitelisted numbers only.
  *
+ * Configure whitelisted phone numbers via environment variable:
+ *   HEALTH_CHECK_WHITELIST=628xxxxx,6281xxxxx
+ *
+ * Or in the bot config via the Manager app (Health Check Whitelist field).
+ *
  * Checks:
  *   - Bot uptime & memory
  *   - WhatsApp connection state
@@ -12,15 +17,21 @@
  *   - Recommendations for updates
  */
 
-const { execSync } = require('child_process');
 const path = require('path');
-const os = require('os');
 const Config = require('./config');
 
-// Only these numbers (JIDs) can trigger health checks
-const WHITELISTED_JIDS = [
-    'XXXXXXXXXXXX@s.whatsapp.net',
-];
+/**
+ * Build whitelisted JIDs from env var or bot config.
+ * Format: phone numbers only (digits, with country code, no '+' or spaces).
+ * Example env: HEALTH_CHECK_WHITELIST=6281234567890,6289876543210
+ */
+function getWhitelistedJids() {
+    const fromEnv = (process.env.HEALTH_CHECK_WHITELIST || '').split(',').map(s => s.trim()).filter(Boolean);
+    const fromConfig = (Config.get('healthCheckWhitelist') || []);
+    const allNumbers = [...new Set([...fromEnv, ...fromConfig])];
+    // Normalize: strip +, spaces, dashes → "628xxx@s.whatsapp.net"
+    return allNumbers.map(n => n.replace(/[\s+\-]/g, '') + '@s.whatsapp.net');
+}
 
 // Trigger phrases (case-insensitive)
 const HEALTH_TRIGGERS = [
@@ -42,7 +53,10 @@ function isHealthCheckRequest(msg) {
     const remoteJid = (msg.remoteJid || '').toLowerCase();
     const text = (msg.text || '').trim().toLowerCase();
 
-    const isWhitelisted = WHITELISTED_JIDS.some(jid =>
+    const whitelistedJids = getWhitelistedJids();
+    if (whitelistedJids.length === 0) return false; // no whitelist configured = disabled
+
+    const isWhitelisted = whitelistedJids.some(jid =>
         senderJid.includes(jid.replace('@s.whatsapp.net', '')) ||
         remoteJid.includes(jid.replace('@s.whatsapp.net', ''))
     );
