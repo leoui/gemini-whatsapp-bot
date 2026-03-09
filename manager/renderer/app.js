@@ -117,6 +117,23 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
+// ── Version Footer ───────────────────────────────────────────
+document.getElementById('changelog-toggle')?.addEventListener('click', () => {
+    const panel = document.getElementById('changelog-panel');
+    const toggle = document.getElementById('changelog-toggle');
+    if (!panel || !toggle) return;
+    const isHidden = panel.classList.contains('hidden');
+    panel.classList.toggle('hidden');
+    toggle.textContent = isHidden ? 'Changelog ▾' : 'Changelog ▸';
+});
+
+document.getElementById('github-link')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const url = 'https://github.com/leoui/gemini-whatsapp-bot';
+    if (BM.openExternal) BM.openExternal(url);
+    else window.open(url, '_blank');
+});
+
 // ── Utilities ────────────────────────────────────────────────
 function toast(msg, type = 'info') {
     const el = document.createElement('div');

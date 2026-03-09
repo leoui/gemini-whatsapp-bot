@@ -88,6 +88,47 @@
       <!-- VPS status badge -->
       <div class="sidebar-footer">
         <div id="vps-badge" class="vps-badge disconnected">⚪ Not connected</div>
+        <div class="version-footer">
+          <div class="version-row">
+            <span class="version-label">v1.2.7</span>
+            <span class="changelog-toggle" id="changelog-toggle">Changelog ▸</span>
+          </div>
+          <div class="changelog-panel hidden" id="changelog-panel">
+            <div class="changelog-content">
+              <div class="changelog-version">v1.2.7</div>
+              <ul>
+                <li>Local persistence — all fields auto-saved &amp; restored on launch</li>
+                <li>Two-phase startup: local store → VPS sync</li>
+                <li>Stable backup to <code>~/.bot-manager-settings.json</code></li>
+              </ul>
+              <div class="changelog-version">v1.2.6</div>
+              <ul>
+                <li>Fix: vps:setEnv double-base64 encoding (8 keys now work)</li>
+                <li>Fix: Gemini apiVersion v1→v1beta (systemInstruction support)</li>
+                <li>Fix: empty API key fields now properly clear VPS values</li>
+              </ul>
+              <div class="changelog-version">v1.2.5</div>
+              <ul>
+                <li>Auto-import config from VPS on startup</li>
+              </ul>
+              <div class="changelog-version">v1.2.4</div>
+              <ul>
+                <li>Unlimited Gemini API keys (dynamic add/remove rows)</li>
+              </ul>
+              <div class="changelog-version">v1.2.3</div>
+              <ul>
+                <li>Reconnect button in Live Logs (stop → clear creds → restart)</li>
+              </ul>
+              <div class="changelog-version">v1.2.0</div>
+              <ul>
+                <li>Gemini model selector (Flash / Pro)</li>
+                <li>VPS Import &amp; Export (full config migration)</li>
+                <li>Initial release with SSH-based management</li>
+              </ul>
+            </div>
+          </div>
+          <a class="github-link" id="github-link" href="#">GitHub ↗</a>
+        </div>
       </div>
     </nav>
 

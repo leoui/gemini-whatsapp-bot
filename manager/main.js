@@ -70,6 +70,12 @@ app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) app.emit('ready');
 });
 
+
+// ────────────────────────────────────────────────────────────
+// Open external URLs in user's default browser
+// ────────────────────────────────────────────────────────────
+ipcMain.handle('shell:openExternal', (_e, url) => shell.openExternal(url));
+
 // ────────────────────────────────────────────────────────────
 // Local config store (VPS credentials, saved locally only)
 // ────────────────────────────────────────────────────────────

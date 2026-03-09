@@ -2,6 +2,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('BotManager', {
+    // Open external URLs in default browser
+    openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
     // Local config store
     store: {
         get: (key) => ipcRenderer.invoke('store:get', key),

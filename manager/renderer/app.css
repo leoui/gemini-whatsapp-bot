@@ -179,6 +179,92 @@ body {
   color: var(--red);
 }
 
+/* ===== VERSION FOOTER ===== */
+.version-footer {
+  margin-top: 12px;
+}
+
+.version-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.version-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.changelog-toggle {
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  transition: color 0.15s;
+  user-select: none;
+}
+
+.changelog-toggle:hover {
+  color: var(--accent-hover, #a78bfa);
+}
+
+.changelog-panel {
+  margin-top: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  transition: max-height 0.25s ease;
+}
+
+.changelog-content {
+  padding: 10px 12px;
+}
+
+.changelog-version {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-top: 8px;
+}
+
+.changelog-version:first-child {
+  margin-top: 0;
+}
+
+.changelog-content ul {
+  margin: 4px 0 0 0;
+  padding-left: 16px;
+}
+
+.changelog-content li {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.changelog-content code {
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.github-link {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.github-link:hover {
+  color: var(--accent);
+}
+
 /* ===== MAIN CONTENT ===== */
 #content {
   flex: 1;
