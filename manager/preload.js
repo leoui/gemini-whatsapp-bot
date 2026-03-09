@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('BotManager', {
         status: () => ipcRenderer.invoke('vps:status'),
         restart: () => ipcRenderer.invoke('vps:restart'),
         backup: () => ipcRenderer.invoke('vps:backup'),
+        downloadBackup: (opts) => ipcRenderer.invoke('vps:downloadBackup', opts),
         logs: (lines) => ipcRenderer.invoke('vps:logs', lines),
         setEnv: (vars) => ipcRenderer.invoke('vps:setEnv', vars),
         importAll: () => ipcRenderer.invoke('vps:importAll'),
@@ -25,6 +26,17 @@ contextBridge.exposeInMainWorld('BotManager', {
     bot: {
         readConfig: () => ipcRenderer.invoke('bot:readConfig'),
         saveConfig: (patch) => ipcRenderer.invoke('bot:saveConfig', patch),
+    },
+    // Native dialogs
+    dialog: {
+        chooseDirectory: () => ipcRenderer.invoke('dialog:chooseDirectory'),
+        openFile: (opts) => ipcRenderer.invoke('dialog:openFile', opts),
+        saveFile: (opts) => ipcRenderer.invoke('dialog:saveFile', opts),
+    },
+    // Settings export / import
+    settings: {
+        export: () => ipcRenderer.invoke('settings:export'),
+        importFromFile: () => ipcRenderer.invoke('settings:importFromFile'),
     },
     // App-level actions
     app: {
@@ -39,4 +51,6 @@ contextBridge.exposeInMainWorld('BotManager', {
         uploadBackup: (opts) => ipcRenderer.invoke('gdrive:uploadBackup', opts),
     },
 });
+
+
 

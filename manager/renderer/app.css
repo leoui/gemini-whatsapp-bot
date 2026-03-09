@@ -827,6 +827,44 @@ code {
   border-radius: 3px;
 }
 
+/* ===== IMPORT TABS ===== */
+.import-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.import-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 14px 20px;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+  letter-spacing: 0.2px;
+}
+
+.import-tab:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.import-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: rgba(108, 92, 231, 0.05);
+}
+
+.import-tab-pane {
+  animation: fadeIn 0.15s ease;
+}
+
+
 /* ===== BOT STATUS DASHBOARD ===== */
 
 /* Hero status card */

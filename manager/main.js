@@ -7,8 +7,34 @@ const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 const { Client: SshClient } = require('ssh2');
+const fs = require('fs');
+const os = require('os');
 
 const store = new Store({ name: 'bot-manager-config' });
+
+// ── Stable settings backup (survives app reinstalls/upgrades) ──
+// Mirrors all store data to ~/.bot-manager-settings.json which lives
+// OUTSIDE the app's userData and is never deleted on upgrade/reinstall.
+const STABLE_SETTINGS_PATH = path.join(os.homedir(), '.bot-manager-settings.json');
+
+function saveStableSettings() {
+    try { fs.writeFileSync(STABLE_SETTINGS_PATH, JSON.stringify(store.store, null, 2), 'utf8'); } catch { }
+}
+
+function restoreStableSettings() {
+    if (!fs.existsSync(STABLE_SETTINGS_PATH)) return;
+    try {
+        const saved = JSON.parse(fs.readFileSync(STABLE_SETTINGS_PATH, 'utf8'));
+        // Only restore if current store is essentially empty (just installed / reinstalled)
+        const hasVps = !!store.get('vps.host');
+        if (!hasVps && saved['vps.host']) {
+            Object.entries(saved).forEach(([k, v]) => store.set(k, v));
+        }
+    } catch { }
+}
+
+// Auto-restore on startup
+restoreStableSettings();
 
 let mainWindow;
 
@@ -44,8 +70,173 @@ app.on('activate', () => {
 // Local config store (VPS credentials, saved locally only)
 // ────────────────────────────────────────────────────────────
 ipcMain.handle('store:get', (_e, key) => store.get(key));
-ipcMain.handle('store:set', (_e, key, value) => { store.set(key, value); return true; });
+ipcMain.handle('store:set', (_e, key, value) => {
+    store.set(key, value);
+    saveStableSettings(); // mirror to stable path for upgrade resilience
+    return true;
+});
 ipcMain.handle('store:getAll', () => store.store);
+
+// ────────────────────────────────────────────────────────────
+// IPC: Native dialog helpers
+// ────────────────────────────────────────────────────────────
+ipcMain.handle('dialog:chooseDirectory', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Choose Save Directory',
+        properties: ['openDirectory', 'createDirectory'],
+    });
+    return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('dialog:openFile', async (_e, { title = 'Open File', filters = [] } = {}) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+        title,
+        properties: ['openFile'],
+        filters,
+    });
+    return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('dialog:saveFile', async (_e, { title = 'Save File', defaultPath = '', filters = [] } = {}) => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+        title,
+        defaultPath,
+        filters,
+    });
+    return result.canceled ? null : result.filePath;
+});
+
+// ────────────────────────────────────────────────────────────
+// IPC: Settings export to XML
+// ────────────────────────────────────────────────────────────
+function settingsToXml(data) {
+    const escape = (s) => String(s || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+
+    const xmlVal = (v) => {
+        if (typeof v === 'object' && v !== null) return `<json>${escape(JSON.stringify(v))}</json>`;
+        return escape(v);
+    };
+
+    const lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        `<BotManagerSettings exported="${new Date().toISOString()}">`,
+    ];
+
+    // Sanitised export — skip secrets that shouldn't be in a file
+    const safe = { ...data };
+    // Keep credentials for the user's own backup; they're saving to their own Mac
+    Object.entries(safe).forEach(([k, v]) => {
+        const tag = k.replace(/[^a-zA-Z0-9._-]/g, '_');
+        lines.push(`  <setting key="${escape(k)}">${xmlVal(v)}</setting>`);
+    });
+    lines.push('</BotManagerSettings>');
+    return lines.join('\n');
+}
+
+function xmlToSettings(xmlStr) {
+    const settings = {};
+    const re = /<setting key="([^"]+)">([\s\S]*?)<\/setting>/g;
+    let m;
+    while ((m = re.exec(xmlStr)) !== null) {
+        const key = m[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+        let val = m[2];
+        if (val.startsWith('<json>') && val.endsWith('</json>')) {
+            const inner = val.slice(6, -7).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+            try { val = JSON.parse(inner); } catch { /* keep as string */ }
+        } else {
+            val = val.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+        }
+        settings[key] = val;
+    }
+    return settings;
+}
+
+ipcMain.handle('settings:export', async () => {
+    try {
+        const savePath = await dialog.showSaveDialog(mainWindow, {
+            title: 'Export Settings',
+            defaultPath: path.join(os.homedir(), 'Desktop', `bot-manager-settings-${new Date().toISOString().slice(0, 10)}.xml`),
+            filters: [{ name: 'XML Settings', extensions: ['xml'] }],
+        });
+        if (savePath.canceled || !savePath.filePath) return { ok: false, cancelled: true };
+        const xml = settingsToXml(store.store);
+        fs.writeFileSync(savePath.filePath, xml, 'utf8');
+        return { ok: true, path: savePath.filePath };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
+ipcMain.handle('settings:importFromFile', async () => {
+    try {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            title: 'Import Settings from XML',
+            properties: ['openFile'],
+            filters: [{ name: 'XML Settings', extensions: ['xml'] }],
+        });
+        if (result.canceled || !result.filePaths[0]) return { ok: false, cancelled: true };
+        const xmlStr = fs.readFileSync(result.filePaths[0], 'utf8');
+        const settings = xmlToSettings(xmlStr);
+        if (!Object.keys(settings).length) throw new Error('No valid settings found in file');
+        // Apply to store
+        Object.entries(settings).forEach(([k, v]) => store.set(k, v));
+        saveStableSettings();
+        return { ok: true, settings, path: result.filePaths[0] };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
+// ────────────────────────────────────────────────────────────
+// IPC: Download latest VPS backup to a local directory
+// ────────────────────────────────────────────────────────────
+ipcMain.handle('vps:downloadBackup', async (_e, { localDir } = {}) => {
+    try {
+        // If no dir provided, show picker
+        let saveDir = localDir;
+        if (!saveDir) {
+            const result = await dialog.showOpenDialog(mainWindow, {
+                title: 'Choose Directory to Save Backup',
+                properties: ['openDirectory', 'createDirectory'],
+            });
+            if (result.canceled || !result.filePaths[0]) return { ok: false, cancelled: true };
+            saveDir = result.filePaths[0];
+        }
+
+        // Find latest backup on VPS
+        const latestFile = await sshExec('ls -t /root/whatsapp-bot-backup-*.tar.gz 2>/dev/null | head -1');
+        if (!latestFile || !latestFile.trim() || latestFile.includes('[ERR]')) {
+            throw new Error('No backup found on VPS. Take a backup first.');
+        }
+        const remoteFile = latestFile.trim();
+        const filename = path.basename(remoteFile);
+        const localPath = path.join(saveDir, filename);
+
+        // Download via SFTP
+        await new Promise((resolve, reject) => {
+            const cfg = getVpsConfig();
+            const conn = new SshClient();
+            conn.on('ready', () => {
+                conn.sftp((err, sftp) => {
+                    if (err) { conn.end(); return reject(new Error('SFTP session failed: ' + err.message)); }
+                    sftp.fastGet(remoteFile, localPath, (err) => {
+                        conn.end();
+                        if (err) reject(new Error('SFTP download failed: ' + err.message));
+                        else resolve();
+                    });
+                });
+            }).on('error', e => reject(new Error('SSH connection failed: ' + e.message)))
+                .connect({ host: cfg.host, port: cfg.port, username: cfg.username, password: cfg.password, readyTimeout: 15000 });
+        });
+
+        return { ok: true, filename, localPath, saveDir };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
 
 // ────────────────────────────────────────────────────────────
 // SSH helpers

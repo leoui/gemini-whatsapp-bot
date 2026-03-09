@@ -359,6 +359,12 @@ document.getElementById('btn-save-groups')?.addEventListener('click', async () =
 // ═══════════════════════════════════════════════════════════
 // PANEL: Backup
 // ═══════════════════════════════════════════════════════════
+
+// Restore saved backup dir
+BM.store.get('backup.localDir').then(dir => {
+    if (dir) document.getElementById('backup-local-dir').value = dir;
+});
+
 document.getElementById('btn-take-backup')?.addEventListener('click', async () => {
     showLoading('btn-take-backup', 'Creating backup...');
     const result = await BM.vps.backup();
@@ -369,6 +375,38 @@ document.getElementById('btn-take-backup')?.addEventListener('click', async () =
     } else {
         setOutput('backup-vps-output', '❌ Backup failed:\n' + result.error, 'error');
         toast('❌ Backup failed', 'error');
+    }
+});
+
+document.getElementById('btn-browse-backup-dir')?.addEventListener('click', async () => {
+    const dir = await BM.dialog.chooseDirectory();
+    if (dir) {
+        document.getElementById('backup-local-dir').value = dir;
+        await BM.store.set('backup.localDir', dir);
+        toast('✅ Save location updated', 'info');
+    }
+});
+
+document.getElementById('btn-download-backup-local')?.addEventListener('click', async () => {
+    const localDir = document.getElementById('backup-local-dir').value.trim() || undefined;
+    showLoading('btn-download-backup-local', '⬇️ Downloading...');
+    setOutput('backup-local-output', '📥 Connecting to VPS and downloading backup via SFTP…', '');
+    const result = await BM.vps.downloadBackup({ localDir });
+    stopLoading('btn-download-backup-local');
+    if (result.ok) {
+        // Remember the directory chosen in the dialog
+        if (result.saveDir) {
+            document.getElementById('backup-local-dir').value = result.saveDir;
+            await BM.store.set('backup.localDir', result.saveDir);
+        }
+        setOutput('backup-local-output',
+            `✅ Backup downloaded!\n📄 File: ${result.filename}\n📂 Saved to: ${result.localPath}`, 'success');
+        toast(`✅ Backup saved to Mac: ${result.filename}`, 'success');
+    } else if (result.cancelled) {
+        setOutput('backup-local-output', 'Cancelled.', '');
+    } else {
+        setOutput('backup-local-output', '❌ Download failed: ' + result.error, 'error');
+        toast('❌ Download failed: ' + result.error, 'error');
     }
 });
 
@@ -581,8 +619,18 @@ document.getElementById('btn-auto-status')?.addEventListener('click', (e) => {
 
 
 // ═══════════════════════════════════════════════════════════
-// PANEL: Import from VPS (onboarding — auto-fills all panels)
+// PANEL: Import Settings (from VPS or XML file)
 // ═══════════════════════════════════════════════════════════
+
+// ── Import tab switching ──────────────────────────────────
+document.querySelectorAll('.import-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.import-tab').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.import-tab-pane').forEach(p => p.classList.add('hidden'));
+        btn.classList.add('active');
+        document.getElementById(`import-tab-${btn.dataset.tab}`).classList.remove('hidden');
+    });
+});
 
 /**
  * Apply an importAll result to every panel's fields.
@@ -656,10 +704,8 @@ function applyImportedConfig(result) {
 document.getElementById('btn-import-vps')?.addEventListener('click', async () => {
     showLoading('btn-import-vps', '⏳ Importing...');
     setOutput('import-output', 'Connecting to VPS and reading all configuration…', '');
-
     const result = await BM.vps.importAll();
     stopLoading('btn-import-vps');
-
     if (result.ok) {
         setOutput('import-output', '✅ Import successful! All panels have been pre-filled.', 'success');
         applyImportedConfig(result);
@@ -669,6 +715,56 @@ document.getElementById('btn-import-vps')?.addEventListener('click', async () =>
         toast('❌ Import failed: ' + result.error, 'error');
     }
 });
+
+// ── Import from File (XML) ────────────────────────────────
+document.getElementById('btn-import-file')?.addEventListener('click', async () => {
+    showLoading('btn-import-file', '⏳ Loading...');
+    const result = await BM.settings.importFromFile();
+    stopLoading('btn-import-file');
+    if (result.cancelled) {
+        setOutput('import-file-output', 'Import cancelled.', ''); return;
+    }
+    if (result.ok) {
+        setOutput('import-file-output',
+            `✅ Settings loaded from file!\n📄 ${result.path}\n⚙️ Restored ${Object.keys(result.settings).length} settings.`, 'success');
+        // Reload VPS fields from store and auto-fill panels from restored data
+        await loadVpsFields();
+        // Build an importAll-compatible result from the file settings to fill all panels
+        const s = result.settings;
+        try {
+            const envVars = {
+                GEMINI_API_KEY: s['gemini_key'] || s['GEMINI_API_KEY'] || '',
+                GROQ_API_KEY: s['groq_key'] || s['GROQ_API_KEY'] || '',
+                POLLINATIONS_API_KEY: s['pollinations_key'] || s['POLLINATIONS_API_KEY'] || '',
+            };
+            const botConfig = {};
+            // Try reading restored config JSON key if present
+            Object.entries(s).filter(([k]) => k.startsWith('bot.')).forEach(([k, v]) => {
+                botConfig[k.replace('bot.', '')] = v;
+            });
+            applyImportedConfig({ envVars, botConfig, meta: {} });
+        } catch { /* best-effort panel filling */ }
+        toast(`✅ Settings restored from file (${Object.keys(result.settings).length} entries)`, 'success');
+    } else {
+        setOutput('import-file-output', '❌ Import failed: ' + result.error, 'error');
+        toast('❌ Import failed: ' + result.error, 'error');
+    }
+});
+
+// ── Export Settings (both buttons trigger same action) ────
+async function doExportSettings(outputId) {
+    const result = await BM.settings.export();
+    if (result.cancelled) return;
+    if (result.ok) {
+        if (outputId) setOutput(outputId, `✅ Settings exported!\n📄 Saved to: ${result.path}`, 'success');
+        toast('✅ Settings exported to XML', 'success');
+    } else {
+        if (outputId) setOutput(outputId, '❌ Export failed: ' + result.error, 'error');
+        toast('❌ Export failed: ' + result.error, 'error');
+    }
+}
+document.getElementById('btn-export-settings')?.addEventListener('click', () => doExportSettings(null));
+document.getElementById('btn-export-settings-standalone')?.addEventListener('click', () => doExportSettings('export-settings-output'));
 
 // ═══════════════════════════════════════════════════════════
 // PANEL: Uninstall

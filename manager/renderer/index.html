@@ -378,9 +378,11 @@
       <section id="panel-backup" class="panel">
         <div class="panel-header">
           <h1>Backup</h1>
-          <p class="subtitle">Create VPS backups and upload to Google Drive</p>
+          <p class="subtitle">Create VPS backups, download to Mac, or upload to Google Drive</p>
         </div>
         <div class="card-grid cols-1">
+
+          <!-- VPS Backup creation -->
           <div class="card">
             <h3>📦 VPS Backup</h3>
             <p class="field-help">Creates a <code>.tar.gz</code> of the bot directory (excluding session and
@@ -390,6 +392,26 @@
             </div>
             <div id="backup-vps-output" class="output-box hidden"></div>
           </div>
+
+          <!-- Download backup to Mac -->
+          <div class="card">
+            <h3>💾 Save Backup to Mac</h3>
+            <p class="field-help">Download the latest VPS backup directly to a folder on your Mac via SFTP.</p>
+            <div class="field">
+              <label>Save Location</label>
+              <div style="display:flex;gap:10px;align-items:center;">
+                <input type="text" id="backup-local-dir" placeholder="~/Downloads (click Browse to change)" readonly
+                  style="flex:1;cursor:default;" />
+                <button id="btn-browse-backup-dir" class="btn-secondary" style="flex-shrink:0;">📁 Browse</button>
+              </div>
+            </div>
+            <div class="action-row">
+              <button id="btn-download-backup-local" class="btn-secondary">⬇️ Download Latest Backup</button>
+            </div>
+            <div id="backup-local-output" class="output-box hidden"></div>
+          </div>
+
+          <!-- Google Drive -->
           <div class="card">
             <h3>☁️ Google Drive Backup</h3>
             <p class="field-help">Sign in with Google to upload backups to your Drive. Requires a free Google Cloud
@@ -431,9 +453,9 @@
                 <span id="gdrive-user-text">✅ Signed in</span>
               </div>
               <div class="field" style="margin-top:12px;">
-                <label>Google Drive Folder ID (optional)</label>
+                <label>Google Drive Folder Name or ID (optional)</label>
                 <input type="text" id="gdrive-folder-id" placeholder="Leave empty to upload to Drive root" />
-                <p class="field-help">Find a folder ID in Drive URL:
+                <p class="field-help">Enter a folder <strong>name</strong> (e.g. <code>wabot</code>) or its ID from
                   drive.google.com/drive/folders/<strong>THIS_PART</strong></p>
               </div>
               <div class="action-row">
@@ -448,6 +470,7 @@
               Google Drive. Your VPS credentials never touch Google's servers.
             </div>
           </div>
+
         </div>
       </section>
 
@@ -588,38 +611,88 @@
         </div>
       </section>
 
-      <!-- ===== Import from VPS ===== -->
+      <!-- ===== Import / Settings ===== -->
       <section id="panel-import" class="panel">
         <div class="panel-header">
-          <h1>Import Settings from VPS</h1>
-          <p class="subtitle">Fetch all existing configuration from your live VPS and auto-fill every panel in this app.
-            Perfect for first-time setup after your bot is already running.</p>
+          <h1>Import Settings</h1>
+          <p class="subtitle">Auto-fill all panels from your live VPS or from a saved XML file. Export your current
+            settings for backup.</p>
         </div>
         <div class="card-grid cols-1">
-          <div class="card">
-            <div class="info-box" style="margin-bottom:20px;">
-              <strong>ℹ️ How it works</strong><br />
-              Connects to your VPS via SSH and reads the <code>systemd</code> service file (for API keys) and the bot's
-              config JSON (for persona, contacts, behavior). All fields across all panels are filled automatically —
-              nothing is saved until you click Save in each panel.
+
+          <!-- Source tabs -->
+          <div class="card" style="padding:0; overflow:hidden;">
+            <div class="import-tabs">
+              <button class="import-tab active" data-tab="vps">🖥 Import from VPS</button>
+              <button class="import-tab" data-tab="file">📄 Import from File</button>
             </div>
-            <div class="action-row">
-              <button id="btn-import-vps" class="btn-primary">📥 Import All Settings from VPS</button>
+
+            <!-- Tab: VPS -->
+            <div id="import-tab-vps" class="import-tab-pane" style="padding:24px;">
+              <div class="info-box" style="margin-bottom:20px;">
+                <strong>ℹ️ How it works</strong><br />
+                Connects to your VPS via SSH and reads the <code>systemd</code> service file (for API keys) and the
+                bot's
+                config JSON (for persona, contacts, behavior). All fields across all panels are filled automatically —
+                nothing is saved until you click Save in each panel.
+              </div>
+              <div class="action-row" style="margin-top:0;">
+                <button id="btn-import-vps" class="btn-primary">📥 Import All Settings from VPS</button>
+              </div>
+              <div id="import-output" class="output-box hidden"></div>
             </div>
-            <div id="import-output" class="output-box hidden"></div>
+
+            <!-- Tab: File -->
+            <div id="import-tab-file" class="import-tab-pane hidden" style="padding:24px;">
+              <div class="info-box" style="margin-bottom:20px;">
+                <strong>ℹ️ Import from saved XML</strong><br />
+                Choose a previously exported <code>.xml</code> settings file. All stored values (VPS credentials, API
+                keys,
+                persona, behavior, contacts, Google Drive creds) will be restored and all panels will be auto-filled.
+              </div>
+              <div class="action-row" style="margin-top:0;">
+                <button id="btn-import-file" class="btn-primary">📂 Browse &amp; Import XML File</button>
+              </div>
+              <div id="import-file-output" class="output-box hidden"></div>
+            </div>
           </div>
+
+          <!-- Summary card (shown after import) -->
           <div id="import-summary-card" class="card hidden">
-            <h3>✅ Import Summary</h3>
-            <p class="field-help" style="margin-bottom:16px;">The following settings were imported. Go to each panel to
-              review and save them to the VPS.</p>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <h3 style="margin:0;">✅ Import Summary</h3>
+              <button id="btn-export-settings" class="btn-secondary small">💾 Export Settings as XML</button>
+            </div>
+            <p class="field-help" style="margin-bottom:16px;">Settings imported. Visit each panel to review and save to
+              VPS.</p>
             <div id="import-summary" class="import-summary"></div>
             <div class="info-box" style="margin-top:16px;">
               <strong>📝 Next step:</strong> All fields are now pre-filled. Visit each panel (Persona, API Keys,
-              Contacts, etc.) to review and save your settings.
+              Contacts, etc.) to review and save your settings. Use <strong>Export Settings as XML</strong> to create a
+              local backup you can restore from anytime — even after reinstalling the app.
             </div>
           </div>
+
+          <!-- Export card (standalone — always visible) -->
+          <div class="card">
+            <h3>📤 Export Settings</h3>
+            <p class="field-help">Save all your current app settings (VPS credentials, API keys, bot config, Google
+              Drive credentials) to an
+              XML file on your Mac. Use this to back up your configuration before upgrading or sharing with another Mac.
+            </p>
+            <div class="action-row">
+              <button id="btn-export-settings-standalone" class="btn-secondary">💾 Export Settings as XML</button>
+            </div>
+            <div id="export-settings-output" class="output-box hidden"></div>
+            <div class="info-box" style="margin-top:16px;">
+              <strong>🔒 Privacy note:</strong> The XML file contains your VPS password and API keys. Keep it in a safe
+              location and never share it publicly.
+            </div>
+          </div>
+
         </div>
       </section>
+
 
       <!-- ===== Uninstall ===== -->
       <section id="panel-uninstall" class="panel">
