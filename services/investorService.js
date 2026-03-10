@@ -7,7 +7,12 @@
  */
 
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 const Config = require('./config');
+
+// Credit usage file path (persisted to disk)
+const USAGE_FILE = path.join(__dirname, '..', '.claude_usage.json');
 
 // ── HTTP helper ─────────────────────────────────────────────
 function httpGet(url, headers = {}) {
@@ -269,23 +274,36 @@ function computeBandarmology(stock) {
     };
 }
 
-// ── Claude Credit Tracking ──────────────────────────────────
-let _claudeBalance = null; // cached balance
+// ── Claude Credit Tracking (Persistent) ─────────────────────────
+function loadUsageData() {
+    try {
+        if (fs.existsSync(USAGE_FILE)) {
+            return JSON.parse(fs.readFileSync(USAGE_FILE, 'utf8'));
+        }
+    } catch { }
+    return { totalSpent: 0, totalInputTokens: 0, totalOutputTokens: 0, requests: 0 };
+}
 
-async function getClaudeBalance() {
-    const apiKey = Config.get('claudeApiKey') || process.env.CLAUDE_API_KEY;
-    if (!apiKey) return null;
-    // Pricing: claude-sonnet-4 = $3/M input, $15/M output
-    // We track per-request cost from usage data
-    return _claudeBalance;
+function saveUsageData(data) {
+    try {
+        fs.writeFileSync(USAGE_FILE, JSON.stringify(data, null, 2));
+    } catch (err) {
+        console.log(`[Investor] Failed to save usage data: ${err.message}`);
+    }
 }
 
 function estimateClaudeCost(usage) {
     if (!usage) return 0;
-    // Claude Sonnet 4 pricing
+    // Claude Sonnet 4 pricing: $3/M input, $15/M output
     const inputCost = (usage.input_tokens || 0) / 1e6 * 3;
     const outputCost = (usage.output_tokens || 0) / 1e6 * 15;
     return inputCost + outputCost;
+}
+
+function getStartingBalance() {
+    const envVal = process.env.CLAUDE_STARTING_BALANCE;
+    if (envVal && !isNaN(parseFloat(envVal))) return parseFloat(envVal);
+    return 0; // no balance configured
 }
 
 // ── Build Analysis Prompt ───────────────────────────────────
@@ -403,13 +421,19 @@ async function analyzeWithClaude(prompt) {
                     if (parsed.error) reject(new Error(parsed.error.message));
                     else {
                         const text = parsed.content?.[0]?.text || 'No response';
-                        // Track usage for credit reporting
                         const usage = parsed.usage;
                         const cost = estimateClaudeCost(usage);
-                        if (_claudeBalance === null) _claudeBalance = 25.00; // default starting
-                        _claudeBalance = Math.max(0, _claudeBalance - cost);
-                        console.log(`[Investor] Claude cost: $${cost.toFixed(4)} | Balance: ~$${_claudeBalance.toFixed(2)}`);
-                        resolve({ text, usage, cost });
+
+                        // Persist usage to disk
+                        const usageData = loadUsageData();
+                        usageData.totalSpent += cost;
+                        usageData.totalInputTokens += (usage?.input_tokens || 0);
+                        usageData.totalOutputTokens += (usage?.output_tokens || 0);
+                        usageData.requests += 1;
+                        saveUsageData(usageData);
+
+                        console.log(`[Investor] Claude cost: $${cost.toFixed(4)} | Total spent: $${usageData.totalSpent.toFixed(4)} | Requests: ${usageData.requests}`);
+                        resolve({ text, usage, cost, totalSpent: usageData.totalSpent });
                     }
                 } catch (e) { reject(new Error(`Claude parse error: ${data.substring(0, 200)}`)); }
             });
@@ -443,8 +467,17 @@ async function analyze(ticker, query, model = 'gemini') {
         const result = await analyzeWithClaude(prompt);
         analysis = result.text;
         const cost = result.cost || 0;
-        const balance = _claudeBalance != null ? _claudeBalance : '?';
-        creditFooter = `\n\n---\nCredit used for this analysis:\n*$${cost.toFixed(2)}*\n\nClaude Remaining Balance: *~$${typeof balance === 'number' ? balance.toFixed(2) : balance}*`;
+        const totalSpent = result.totalSpent || 0;
+        const tokens = result.usage || {};
+        const startBal = getStartingBalance();
+        const remaining = startBal > 0 ? Math.max(0, startBal - totalSpent) : null;
+
+        let footer = `\n\n---\nCredit used for this analysis:\n*$${cost.toFixed(2)}* (${(tokens.input_tokens || 0).toLocaleString()} input + ${(tokens.output_tokens || 0).toLocaleString()} output tokens)`;
+        footer += `\n\nTotal spent: *$${totalSpent.toFixed(2)}*`;
+        if (remaining !== null) {
+            footer += `\nClaude Remaining Balance: *~$${remaining.toFixed(2)}*`;
+        }
+        creditFooter = footer;
     } else {
         analysis = await analyzeWithGemini(prompt);
     }
