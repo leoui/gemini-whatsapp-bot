@@ -179,6 +179,12 @@ async function generateHealthReport(services) {
     const pollinationsKey = Config.get?.('pollinationsApiKey') || process.env.POLLINATIONS_API_KEY || '';
     const pollinationsStatus = pollinationsKey ? '✅ Configured' : '⚠️ Not configured';
 
+    const claudeKey = Config.get?.('claudeApiKey') || process.env.CLAUDE_API_KEY || '';
+    const claudeStatus = claudeKey ? '✅ Configured — claude-sonnet-4' : '⚠️ Not configured (no /cl commands)';
+
+    const fmpKey = Config.get?.('fmpApiKey') || process.env.FMP_API_KEY || '';
+    const fmpStatus = fmpKey ? '✅ Configured — 25 req/day (free)' : '⚠️ Not configured (no fundamentals)';
+
     const savedContacts = (Config.get?.('savedContacts') || []).length;
     const scheduledTasks = (Config.get?.('scheduledTasks') || []).length;
 
@@ -205,6 +211,12 @@ async function generateHealthReport(services) {
     if (!pollinationsKey) {
         recommendations.push('• *Pollinations*: Add POLLINATIONS_API_KEY for free image generation');
     }
+    if (!claudeKey) {
+        recommendations.push('• *Claude*: Add CLAUDE_API_KEY for /cl investment analysis');
+    }
+    if (!fmpKey) {
+        recommendations.push('• *FMP*: Add FMP_API_KEY for stock fundamentals (P/E, ROE, margins)');
+    }
 
     // === Format report ===
     const divider = '━━━━━━━━━━━━━━━━━━━━━━━━━';
@@ -222,7 +234,7 @@ async function generateHealthReport(services) {
         ? `\n\n${divider}\n🔧 *Recommendations*\n${recommendations.join('\n')}`
         : `\n\n${divider}\n✅ *Everything is up to date!*`;
 
-    const report = `🤖 *Bot Health Check*
+    const report = `🤖 *Bot Health Check — v3*
 ${divider}
 🕐 Server Time: ${serverDateStr}, ${serverTimeStr}
 ⏱ Uptime: ${uptimeH}h ${uptimeM}m
@@ -237,6 +249,8 @@ ${divider}
 🤖 Gemini: ${geminiStatus}
 ⚡ Groq: ${groqStatus}
 🖼 Pollinations: ${pollinationsStatus}
+🧠 Claude: ${claudeStatus}
+📊 FMP: ${fmpStatus}
 
 ${divider}
 📦 *Package Versions*

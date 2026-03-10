@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Gemini WhatsApp Bot — Headless Server Mode v2
+ * Gemini WhatsApp Bot — Headless Server Mode v3
  * For Linux VPS / Cloud Server deployment (512MB RAM)
  * Runs without Electron GUI, using terminal for QR and logs.
  *
