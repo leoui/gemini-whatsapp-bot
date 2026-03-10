@@ -1,9 +1,9 @@
 'use strict';
 /**
- * Investment Analysis Service v2
- * Uses Yahoo Finance chart API (no crumb, works everywhere including EU VPS)
- * as primary data source, with optional crumb-based quoteSummary for
- * enriched fundamental data when available.
+ * Investment Analysis Service v3
+ * Yahoo Finance chart API (no crumb, EU VPS compatible) + FMP fundamentals.
+ * Features: Bandarmology (volume-based smart money tracking),
+ * Claude credit tracking, scalping analysis.
  */
 
 const https = require('https');
@@ -119,6 +119,7 @@ async function fetchChartData(ticker) {
         vsSMA20: s20 ? ((priceNow - s20) / s20 * 100).toFixed(2) : null,
         vsSMA50: s50 ? ((priceNow - s50) / s50 * 100).toFixed(2) : null,
         last5: prices.slice(-5),
+        _prices: prices, // raw OHLCV for bandarmology computation
 
         // Fundamental placeholders (filled by quoteSummary if available)
         pe: null, forwardPE: null, pb: null, ps: null, peg: null,
@@ -203,6 +204,90 @@ function rsi(d, p) {
 function pct(n) { return n != null ? (n * 100).toFixed(1) + '%' : 'N/A'; }
 function cap(n) { if (!n) return 'N/A'; if (n >= 1e12) return (n / 1e12).toFixed(2) + 'T'; if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B'; if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M'; return n.toLocaleString(); }
 
+// ── Bandarmology (Volume-Based Smart Money Analysis) ────────
+function computeBandarmology(stock) {
+    const prices = stock._prices; // raw price array from fetchChartData
+    if (!prices || prices.length < 10) return null;
+
+    const volumes = prices.map(p => p.v || 0);
+    const closes = prices.map(p => p.c);
+    const avgVol = volumes.slice(-20).reduce((s, v) => s + v, 0) / Math.min(20, volumes.length);
+
+    // On-Balance Volume (OBV)
+    const obv = [0];
+    for (let i = 1; i < closes.length; i++) {
+        if (closes[i] > closes[i - 1]) obv.push(obv[i - 1] + volumes[i]);
+        else if (closes[i] < closes[i - 1]) obv.push(obv[i - 1] - volumes[i]);
+        else obv.push(obv[i - 1]);
+    }
+    const obv5 = obv.slice(-5);
+    const obvSlope = obv5.length >= 2 ? obv5[obv5.length - 1] - obv5[0] : 0;
+    const obvTrend = obvSlope > 0 ? 'RISING (accumulation)' : 'FALLING (distribution)';
+
+    // Smart money detection (last 10 days)
+    const smartMoney = [];
+    for (let i = Math.max(1, prices.length - 10); i < prices.length; i++) {
+        const prev = prices[i - 1], curr = prices[i];
+        const priceChg = ((curr.c - prev.c) / prev.c * 100);
+        const volRatio = curr.v / avgVol;
+        const bodyRatio = (curr.h - curr.l) > 0 ? Math.abs(curr.c - curr.o) / (curr.h - curr.l) : 0;
+
+        const signals = [];
+        if (volRatio > 1.5 && bodyRatio < 0.3) signals.push('🕵️ STEALTH');
+        if (volRatio > 2.0) signals.push('🐋 WHALE');
+        if (volRatio > 1.3 && curr.c > prev.c) signals.push('🟢 ACC');
+        else if (volRatio > 1.3 && curr.c < prev.c) signals.push('🔴 DIST');
+        else if (volRatio < 0.5) signals.push('💤 DRY-UP');
+
+        if (signals.length > 0) {
+            smartMoney.push(`${curr.d}: ${priceChg > 0 ? '+' : ''}${priceChg.toFixed(1)}% Vol=${(curr.v / 1e6).toFixed(1)}M (${volRatio.toFixed(1)}x) → ${signals.join(', ')}`);
+        }
+    }
+
+    // Bandar Score (7-day)
+    let accDays = 0, distDays = 0;
+    for (let i = Math.max(1, prices.length - 7); i < prices.length; i++) {
+        const volRatio = prices[i].v / avgVol;
+        if (volRatio > 1.0 && prices[i].c > prices[i - 1].c) accDays++;
+        else if (volRatio > 1.0 && prices[i].c < prices[i - 1].c) distDays++;
+    }
+    const bandarScore = accDays - distDays;
+    const bandarLabel = bandarScore > 0 ? '🟢 NET ACCUMULATION' : bandarScore < 0 ? '🔴 NET DISTRIBUTION' : '⚪ NEUTRAL';
+
+    // Volume trend (last 5 days as bar chart)
+    const volBars = prices.slice(-5).map(p => {
+        const ratio = p.v / avgVol;
+        const bar = '█'.repeat(Math.min(10, Math.round(ratio * 5)));
+        const flag = ratio > 2 ? ' 🐋' : ratio > 1.5 ? ' 🚨' : ratio > 1.2 ? ' ⚠️' : ratio < 0.5 ? ' 💤' : '';
+        return `${p.d}: ${bar} ${(p.v / 1e6).toFixed(1)}M (${ratio.toFixed(1)}x)${flag}`;
+    }).join('\n');
+
+    return {
+        obvTrend, obvSlope: (obvSlope / 1e6).toFixed(1) + 'M',
+        smartMoney, bandarScore, bandarLabel,
+        accDays, distDays, volBars, avgVol,
+    };
+}
+
+// ── Claude Credit Tracking ──────────────────────────────────
+let _claudeBalance = null; // cached balance
+
+async function getClaudeBalance() {
+    const apiKey = Config.get('claudeApiKey') || process.env.CLAUDE_API_KEY;
+    if (!apiKey) return null;
+    // Pricing: claude-sonnet-4 = $3/M input, $15/M output
+    // We track per-request cost from usage data
+    return _claudeBalance;
+}
+
+function estimateClaudeCost(usage) {
+    if (!usage) return 0;
+    // Claude Sonnet 4 pricing
+    const inputCost = (usage.input_tokens || 0) / 1e6 * 3;
+    const outputCost = (usage.output_tokens || 0) / 1e6 * 15;
+    return inputCost + outputCost;
+}
+
 // ── Build Analysis Prompt ───────────────────────────────────
 function buildPrompt(stock, query) {
     const now = new Date();
@@ -250,11 +335,19 @@ DIVIDENDS: Yield=${pct(stock.divYield)} | PayoutRatio=${pct(stock.payoutRatio)}
 EARNINGS: EPS=${stock.eps || 'N/A'} | FwdEPS=${stock.fwdEps || 'N/A'} | Beta=${stock.beta || 'N/A'}
 ANALYST: Target=${stock.targetLow || '?'}-${stock.targetMean || '?'}-${stock.targetHigh || '?'} | Rec=${stock.recKey || 'N/A'} (${stock.recMean || 'N/A'}) | #Analysts=${stock.numAnalysts || 'N/A'}` : 'FUNDAMENTAL DATA: Not available from data source. Analyze based on price action and technicals only.'}
 
+${stock.bandar ? `BANDARMOLOGY (Volume-Based Smart Money Analysis):
+OBV Trend: ${stock.bandar.obvTrend} (slope: ${stock.bandar.obvSlope})
+Bandar Score (7d): ${stock.bandar.bandarScore > 0 ? '+' : ''}${stock.bandar.bandarScore} → ${stock.bandar.bandarLabel} (Acc: ${stock.bandar.accDays}d, Dist: ${stock.bandar.distDays}d)
+Avg Volume (20d): ${(stock.bandar.avgVol / 1e6).toFixed(1)}M
+${stock.bandar.smartMoney.length > 0 ? 'Smart Money Signals:\n' + stock.bandar.smartMoney.join('\n') : 'No unusual smart money activity detected.'}
+Volume Pattern (5d):\n${stock.bandar.volBars}` : ''}
+
 USER QUERY: "${query}"
 
 Respond with:
 📊 **${stock.ticker} — Quick Summary** (one line)
 ${hasFundamentals ? '💰 **Valuation Analysis** (cite actual P/E, P/B, PEG)\n📈 **Growth Assessment** (cite actual growth numbers)\n🏦 **Fundamental Health** (cite actual D/E, cash, FCF)' : '📈 **Price Action Analysis** (cite 1M/3M performance, 52W range position)'}
+🕵️ **Bandar Analysis** (OBV trend, smart money signals, whale activity, bandar score — cite the data above)
 ⚡ **Scalping Analysis** (S/R levels, RSI reading, momentum, entry zones)
 🎯 **Signal: 🟢 BUY / 🟡 HOLD / 🔴 SELL** (Confidence X%) with 2-3 bullet rationale
 📋 **Trading Plan** (Entry, Stop-Loss, TP1, TP2, Position sizing)
@@ -308,7 +401,16 @@ async function analyzeWithClaude(prompt) {
                 try {
                     const parsed = JSON.parse(data);
                     if (parsed.error) reject(new Error(parsed.error.message));
-                    else resolve(parsed.content?.[0]?.text || 'No response');
+                    else {
+                        const text = parsed.content?.[0]?.text || 'No response';
+                        // Track usage for credit reporting
+                        const usage = parsed.usage;
+                        const cost = estimateClaudeCost(usage);
+                        if (_claudeBalance === null) _claudeBalance = 25.00; // default starting
+                        _claudeBalance = Math.max(0, _claudeBalance - cost);
+                        console.log(`[Investor] Claude cost: $${cost.toFixed(4)} | Balance: ~$${_claudeBalance.toFixed(2)}`);
+                        resolve({ text, usage, cost });
+                    }
                 } catch (e) { reject(new Error(`Claude parse error: ${data.substring(0, 200)}`)); }
             });
         });
@@ -327,16 +429,27 @@ async function analyze(ticker, query, model = 'gemini') {
     // 1. Fetch chart data (always works, no crumb needed)
     let stock = await fetchChartData(t);
 
-    // 2. Try to enrich with fundamentals (needs crumb, may fail on EU VPS)
+    // 2. Try to enrich with fundamentals
     stock = await enrichWithFundamentals(stock);
 
-    // 3. Build prompt and run AI
-    const prompt = buildPrompt(stock, query);
-    const analysis = model === 'claude'
-        ? await analyzeWithClaude(prompt)
-        : await analyzeWithGemini(prompt);
+    // 3. Compute bandarmology
+    stock.bandar = computeBandarmology(stock);
 
-    return analysis;
+    // 4. Build prompt and run AI
+    const prompt = buildPrompt(stock, query);
+    let analysis, creditFooter = '';
+
+    if (model === 'claude') {
+        const result = await analyzeWithClaude(prompt);
+        analysis = result.text;
+        const cost = result.cost || 0;
+        const balance = _claudeBalance != null ? _claudeBalance : '?';
+        creditFooter = `\n\n---\nCredit used for this analysis:\n*$${cost.toFixed(2)}*\n\nClaude Remaining Balance: *~$${typeof balance === 'number' ? balance.toFixed(2) : balance}*`;
+    } else {
+        analysis = await analyzeWithGemini(prompt);
+    }
+
+    return analysis + creditFooter;
 }
 
-module.exports = { analyze, fetchChartData, enrichWithFundamentals };
+module.exports = { analyze, fetchChartData, enrichWithFundamentals, computeBandarmology };
