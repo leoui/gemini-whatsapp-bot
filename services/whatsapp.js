@@ -145,9 +145,9 @@ class WhatsAppService extends EventEmitter {
                     this.requestPairingCode(phoneNumber);
                 } else {
                     console.log(`[WhatsApp] QR failed ${this.maxQrAttempts} times. Set WHATSAPP_PHONE_NUMBER env for pairing code fallback.`);
-                    this.emit('status', { 
-                        state: 'qr_failed', 
-                        message: `QR failed ${this.maxQrAttempts} times. Use pairing code instead — set WHATSAPP_PHONE_NUMBER env (digits only, with country code, e.g. 628123456789)` 
+                    this.emit('status', {
+                        state: 'qr_failed',
+                        message: `QR failed ${this.maxQrAttempts} times. Use pairing code instead — set WHATSAPP_PHONE_NUMBER env (digits only, with country code, e.g. 628123456789)`
                     });
                 }
             }
@@ -241,9 +241,9 @@ class WhatsAppService extends EventEmitter {
 
         if (!/^\d{10,15}$/.test(cleanNumber)) {
             console.error(`[WhatsApp] Invalid phone number format: "${phoneNumber}" → "${cleanNumber}". Must be 10-15 digits with country code.`);
-            this.emit('status', { 
-                state: 'error', 
-                message: `Invalid phone number: ${cleanNumber}. Use digits only with country code (e.g. 628123456789)` 
+            this.emit('status', {
+                state: 'error',
+                message: `Invalid phone number: ${cleanNumber}. Use digits only with country code (e.g. 628123456789)`
             });
             return null;
         }
@@ -264,8 +264,8 @@ class WhatsAppService extends EventEmitter {
             console.log(`[WhatsApp] Enter the code above to connect.`);
 
             this.emit('pairing_code', { code, formatted: formattedCode });
-            this.emit('status', { 
-                state: 'pairing', 
+            this.emit('status', {
+                state: 'pairing',
                 message: `Enter pairing code in WhatsApp: ${formattedCode}`,
                 pairingCode: formattedCode
             });
@@ -273,9 +273,9 @@ class WhatsAppService extends EventEmitter {
             return code;
         } catch (err) {
             console.error(`[WhatsApp] Pairing code request failed:`, err.message);
-            this.emit('status', { 
-                state: 'error', 
-                message: `Pairing code failed: ${err.message}` 
+            this.emit('status', {
+                state: 'error',
+                message: `Pairing code failed: ${err.message}`
             });
             return null;
         }
@@ -365,18 +365,27 @@ class WhatsAppService extends EventEmitter {
         const botJid = this.getBotJid();
         // Baileys multi-device format: "12345:67@s.whatsapp.net" — strip ":XX" device suffix
         const botNumber = botJid ? botJid.split('@')[0].split(':')[0] : null;
+        // Bot's LID (Linked ID) — WhatsApp now uses LID format for mentions in groups
+        const botLid = this.sock?.user?.lid || null;
+        const botLidNumber = botLid ? botLid.split('@')[0].split(':')[0] : null;
 
         const mentionedJids = message.extendedTextMessage?.contextInfo?.mentionedJid ||
             message.imageMessage?.contextInfo?.mentionedJid ||
             message.videoMessage?.contextInfo?.mentionedJid ||
             message.conversation?.contextInfo?.mentionedJid || [];
 
-        // Check if bot is in the mentionedJid list (compare phone numbers only, strip device suffix)
+        // Check if bot is in the mentionedJid list
+        // Compare against both phone number (legacy) and LID (new WhatsApp format)
         let isMentioned = false;
-        if (botNumber && mentionedJids.length > 0) {
+        if (mentionedJids.length > 0) {
             isMentioned = mentionedJids.some(jid => {
-                const mentionedNumber = jid?.split('@')[0]?.split(':')[0];
-                return mentionedNumber === botNumber;
+                const mentionedId = jid?.split('@')[0]?.split(':')[0];
+                const mentionedSuffix = jid?.split('@')[1];
+                // Match by phone number (legacy @s.whatsapp.net mentions)
+                if (botNumber && mentionedId === botNumber) return true;
+                // Match by LID (new @lid mentions)
+                if (botLidNumber && mentionedSuffix === 'lid' && mentionedId === botLidNumber) return true;
+                return false;
             });
         }
 
@@ -389,7 +398,7 @@ class WhatsAppService extends EventEmitter {
         }
 
         if (isGroup) {
-            console.log(`[WhatsApp] Group msg — botNumber=${botNumber}, mentionedJids=${JSON.stringify(mentionedJids)}, isMentioned=${isMentioned}`);
+            console.log(`[WhatsApp] Group msg — botNumber=${botNumber}, botLid=${botLidNumber || 'N/A'}, mentionedJids=${JSON.stringify(mentionedJids)}, isMentioned=${isMentioned}`);
         }
 
         if (message.conversation || message.extendedTextMessage) {

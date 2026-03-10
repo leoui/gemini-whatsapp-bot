@@ -98,20 +98,17 @@ async function handleIncomingMessage(msg) {
         const triggerWord = (Config.get('groupTriggerWord') || 'bot').toLowerCase();
         const msgText = (msg.text || '').toLowerCase().trim();
 
-        // Check if message STARTS with trigger word (e.g. "cuy hello" or "cuy, help me")
-        const triggeredByKeyword = msgText.startsWith(triggerWord + ',') ||
-            msgText.startsWith(triggerWord + ' ') ||
-            msgText.startsWith(triggerWord + ':') ||
-            msgText === triggerWord;
+        // Check if message CONTAINS the trigger word anywhere (e.g. "welcome cuy" or "cuy help me")
+        const triggeredByKeyword = msgText.includes(triggerWord);
 
         if (!msg.isMentioned && !triggeredByKeyword) {
             log('info', `[Bot] Group message ignored (not mentioned, no trigger word): "${(msg.text || '').substring(0, 40)}"`);
             return;
         }
 
-        // Strip the trigger word from the beginning of the message
+        // Strip the trigger word from the message text
         if (triggeredByKeyword && msg.text) {
-            msg.text = msg.text.replace(new RegExp(`^${triggerWord}[,:\\s]*`, 'i'), '').trim();
+            msg.text = msg.text.replace(new RegExp(triggerWord, 'gi'), '').replace(/[,:\s]+/g, ' ').trim();
         }
 
         // Strip @mention tag from message text if present
