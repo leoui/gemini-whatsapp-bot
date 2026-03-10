@@ -27,6 +27,7 @@ const FileManager = require('./services/fileManager');
 const Scheduler = require('./services/scheduler');
 const Router = require('./services/router');
 const HealthCheck = require('./services/healthCheck');
+const InvestorService = require('./services/investorService');
 
 // --- Service Instances ---
 let whatsapp, gemini, groq, calendar, humanBehavior, fileManager;
@@ -52,6 +53,19 @@ function sendToRenderer(_channel, _data) { /* no GUI */ }
 function addToLog(entry) {
     messageLog.unshift(entry);
     if (messageLog.length > 500) messageLog.pop();
+}
+
+function splitMessage(text, maxLen = 4000) {
+    const parts = [];
+    let remaining = text;
+    while (remaining.length > maxLen) {
+        let splitAt = remaining.lastIndexOf('\n', maxLen);
+        if (splitAt < maxLen * 0.5) splitAt = maxLen;
+        parts.push(remaining.substring(0, splitAt));
+        remaining = remaining.substring(splitAt).trimStart();
+    }
+    if (remaining.length > 0) parts.push(remaining);
+    return parts;
 }
 
 // === Copy handleIncomingMessage and all its logic from main.js ===
@@ -138,6 +152,52 @@ async function handleIncomingMessage(msg) {
         const _isHealthAttempt = ['/healthcheck', '/health', 'health check', 'healthcheck', 'status bot', 'bot status', 'cek status', 'cek bot'].some(t => _lowerTxt.includes(t));
         if (_isHealthAttempt) {
             log('info', `[HealthCheck] Ignored from non-whitelisted ${msg.senderJid}`);
+            return;
+        }
+
+        // === /cl and /gm prefix: Investment Analysis ===
+        const msgTextTrimmed = (msg.text || '').trim();
+        const clMatch = msgTextTrimmed.match(/^\/cl\s+(.+)/is);
+        const gmMatch = !clMatch ? msgTextTrimmed.match(/^\/gm\s+(.+)/is) : null;
+
+        if (clMatch || gmMatch) {
+            const model = clMatch ? 'claude' : 'gemini';
+            const query = (clMatch || gmMatch)[1].trim();
+            log('info', `[Investor] /${clMatch ? 'cl' : 'gm'} request: "${query}"`);
+
+            // Extract ticker from query — look for stock-like patterns
+            const tickerMatch = query.match(/\b([A-Z]{1,5}(?:\.JK)?)\b/i);
+            const ticker = tickerMatch ? tickerMatch[1].toUpperCase() : null;
+
+            try {
+                await whatsapp.markRead(msg.key);
+                await whatsapp.setPresence(msg.remoteJid, 'composing');
+
+                let analysis;
+                if (ticker) {
+                    analysis = await InvestorService.analyze(ticker, query, model);
+                } else {
+                    analysis = `⚠️ Could not detect a stock ticker in your query.\n\nUsage examples:\n• /cl analyze BBRI.JK\n• /gm is AAPL undervalued?\n• /cl trading plan NVDA scalping\n• /gm compare BBCA.JK vs BMRI.JK`;
+                }
+
+                // Split long messages (WhatsApp limit ~4096 chars)
+                if (analysis.length > 4000) {
+                    const parts = splitMessage(analysis, 4000);
+                    for (const part of parts) {
+                        await whatsapp.sendMessage(msg.remoteJid, part);
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+                } else {
+                    await whatsapp.sendMessage(msg.remoteJid, analysis);
+                }
+
+                await whatsapp.setPresence(msg.remoteJid, 'paused');
+                log('ok', `[Investor] Analysis sent for ${ticker || 'unknown'} via ${model}`);
+            } catch (investErr) {
+                log('err', `[Investor] Failed: ${investErr.message}`);
+                await whatsapp.sendMessage(msg.remoteJid, `⚠️ Investment analysis failed: ${investErr.message}`);
+                await whatsapp.setPresence(msg.remoteJid, 'paused');
+            }
             return;
         }
 
@@ -492,6 +552,35 @@ async function handleIncomingMessage(msg) {
             } catch (imgErr) {
                 log('error', `[Bot] IMAGE_GEN failed: ${imgErr.message}`);
                 responseResult.text = cleanText || '⚠️ Image generation failed, please try again.';
+            }
+        }
+
+        // --- Handle [STOCK_ANALYSIS: ticker] tag in AI response ---
+        const stockTagMatch = responseResult.text?.match(/\[STOCK_ANALYSIS:\s*([^\]]+)\]/);
+        if (stockTagMatch) {
+            const ticker = stockTagMatch[1].trim().toUpperCase();
+            const cleanText = responseResult.text.replace(/\[STOCK_ANALYSIS:[^\]]+\]/g, '').trim();
+            log('info', `[Investor] AI requested stock analysis: ${ticker}`);
+            try {
+                const analysis = await InvestorService.analyze(ticker, `Analyze ${ticker}`, 'gemini');
+                await whatsapp.markRead(msg.key);
+                await whatsapp.setPresence(msg.remoteJid, 'composing');
+                await new Promise(r => setTimeout(r, 1500));
+                if (analysis.length > 4000) {
+                    const parts = splitMessage(analysis, 4000);
+                    for (const part of parts) {
+                        await whatsapp.sendMessage(msg.remoteJid, part);
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+                } else {
+                    await whatsapp.sendMessage(msg.remoteJid, analysis);
+                }
+                await whatsapp.setPresence(msg.remoteJid, 'paused');
+                log('ok', `[Investor] Tag-based analysis sent: ${ticker}`);
+                return;
+            } catch (err) {
+                log('err', `[Investor] Tag analysis failed: ${err.message}`);
+                responseResult.text = cleanText || `⚠️ Stock analysis for ${ticker} failed: ${err.message}`;
             }
         }
 
