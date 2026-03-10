@@ -505,6 +505,51 @@ async function handleIncomingMessage(msg) {
             }
         }
 
+        // --- Detect [IMAGE_GEN: prompt] tag in AI response ---
+        const imageGenTagMatch = responseResult.text?.match(/\[IMAGE_GEN:\s*([^\]]+)\]/);
+        if (imageGenTagMatch) {
+            const imagePrompt = imageGenTagMatch[1].trim();
+            const cleanText = responseResult.text.replace(/\[IMAGE_GEN:[^\]]+\]/g, '').trim();
+
+            console.log(`[Bot] AI requested image generation: "${imagePrompt}"`);
+
+            try {
+                const imageResult = await gemini.generateImage(chatId, imagePrompt);
+
+                if (imageResult?.imagePath) {
+                    const delays = await humanBehavior.calculateDelays(msg.text, cleanText || '📸');
+                    await HumanBehavior.sleep(delays.readDelay);
+                    await whatsapp.markRead(msg.key);
+                    await whatsapp.setPresence(msg.remoteJid, 'composing');
+                    await HumanBehavior.sleep(delays.typingDelay);
+
+                    await whatsapp.sendFile(msg.remoteJid, imageResult.imagePath, {
+                        caption: cleanText || '📸',
+                        mimetype: imageResult.mimeType || 'image/png',
+                    });
+
+                    await whatsapp.setPresence(msg.remoteJid, 'paused');
+                    humanBehavior.recordMessageSent();
+                    addToLog({
+                        id: `resp_${Date.now()}`,
+                        timestamp: Date.now(),
+                        sender: 'Bot',
+                        remoteJid: msg.remoteJid,
+                        text: `🎨 Generated image: "${imagePrompt}"`,
+                        direction: 'outgoing',
+                        status: 'sent',
+                    });
+                    return;
+                } else {
+                    // Image generation failed — send the clean text with an error note
+                    responseResult.text = cleanText || '⚠️ Image generation failed, please try again.';
+                }
+            } catch (imgErr) {
+                console.error('[Bot] IMAGE_GEN tag handler failed:', imgErr);
+                responseResult.text = cleanText || '⚠️ Image generation failed, please try again.';
+            }
+        }
+
         // --- Detect [REMINDER:time:message] tag in AI response ---
         const reminderTagMatch = responseResult.text?.match(/\[REMINDER:([^:]+):([^\]]+)\]/);
         if (reminderTagMatch) {
