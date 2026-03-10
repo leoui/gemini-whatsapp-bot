@@ -132,62 +132,64 @@ async function fetchChartData(ticker) {
     };
 }
 
-// ── Optional: QuoteSummary enrichment (needs crumb) ─────────
+// ── Enrich with FMP (Financial Modeling Prep) fundamentals ───
 async function enrichWithFundamentals(stock) {
-    const hasCrumb = await tryGetCrumb();
-    if (!hasCrumb) return stock;
+    const fmpKey = Config.get('fmpApiKey') || process.env.FMP_API_KEY;
+    if (!fmpKey) {
+        console.log('[Investor] No FMP_API_KEY — skipping fundamentals');
+        return stock;
+    }
+
+    // FMP uses plain tickers for US, and the same .JK suffix for IDX
+    const ticker = encodeURIComponent(stock.ticker);
 
     try {
-        const modules = 'price,summaryDetail,defaultKeyStatistics,financialData';
-        const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(stock.ticker)}?modules=${modules}&crumb=${encodeURIComponent(_crumb)}`;
-        const resp = await httpGet(url, { Cookie: _cookies });
-        const json = JSON.parse(resp.data);
-        const r = json.quoteSummary?.result?.[0];
-        if (!r) return stock;
+        // Fetch key metrics + profile in parallel
+        const [profileResp, ratiosResp] = await Promise.all([
+            httpGet(`https://financialmodelingprep.com/api/v3/profile/${ticker}?apikey=${fmpKey}`),
+            httpGet(`https://financialmodelingprep.com/api/v3/ratios-ttm/${ticker}?apikey=${fmpKey}`),
+        ]);
 
-        const s = r.summaryDetail || {}, k = r.defaultKeyStatistics || {}, f = r.financialData || {}, p = r.price || {};
-        const raw = (o) => o?.raw ?? null;
+        const profile = JSON.parse(profileResp.data)?.[0];
+        const ratios = JSON.parse(ratiosResp.data)?.[0];
 
-        // Enrich stock with fundamental data
-        stock.name = p.longName || p.shortName || stock.name;
-        stock.marketCap = raw(p.marketCap) || stock.marketCap;
-        stock.pe = raw(s.trailingPE) || raw(k.trailingPE);
-        stock.forwardPE = raw(s.forwardPE) || raw(k.forwardPE);
-        stock.pb = raw(k.priceToBook);
-        stock.ps = raw(k.priceToSalesTrailing12Months);
-        stock.peg = raw(k.pegRatio);
-        stock.evEbitda = raw(k.enterpriseToEbitda);
-        stock.profitMargin = raw(f.profitMargins);
-        stock.opMargin = raw(f.operatingMargins);
-        stock.grossMargin = raw(f.grossMargins);
-        stock.roe = raw(f.returnOnEquity);
-        stock.roa = raw(f.returnOnAssets);
-        stock.revGrowth = raw(f.revenueGrowth);
-        stock.earnGrowth = raw(f.earningsGrowth);
-        stock.debtEquity = raw(f.debtToEquity);
-        stock.currentRatio = raw(f.currentRatio);
-        stock.totalCash = raw(f.totalCash);
-        stock.totalDebt = raw(f.totalDebt);
-        stock.fcf = raw(f.freeCashflow);
-        stock.opCF = raw(f.operatingCashflow);
-        stock.divYield = raw(s.dividendYield);
-        stock.payoutRatio = raw(s.payoutRatio);
-        stock.eps = raw(k.trailingEps);
-        stock.fwdEps = raw(k.forwardEps);
-        stock.beta = raw(k.beta) || raw(s.beta);
-        stock.targetLow = raw(f.targetLowPrice);
-        stock.targetMean = raw(f.targetMeanPrice);
-        stock.targetHigh = raw(f.targetHighPrice);
-        stock.recKey = f.recommendationKey;
-        stock.recMean = raw(f.recommendationMean);
-        stock.numAnalysts = raw(f.numberOfAnalystOpinions);
+        if (profile) {
+            stock.name = profile.companyName || stock.name;
+            stock.marketCap = profile.mktCap || stock.marketCap;
+            stock.pe = profile.pe || null;
+            stock.beta = profile.beta || stock.beta;
+            stock.divYield = profile.lastDiv ? profile.lastDiv / stock.currentPrice : null;
+            stock.eps = profile.eps || null;
+            stock.targetMean = profile.dcf || null;
+        }
 
-        console.log(`[Investor] Enriched ${stock.ticker} with fundamental data`);
+        if (ratios) {
+            stock.pe = ratios.peRatioTTM || stock.pe;
+            stock.forwardPE = ratios.priceEarningsToGrowthRatioTTM ? stock.pe / ratios.priceEarningsToGrowthRatioTTM : null;
+            stock.pb = ratios.priceToBookRatioTTM || null;
+            stock.ps = ratios.priceToSalesRatioTTM || null;
+            stock.peg = ratios.priceEarningsToGrowthRatioTTM || null;
+            stock.evEbitda = ratios.enterpriseValueOverEBITDATTM || null;
+            stock.profitMargin = ratios.netProfitMarginTTM || null;
+            stock.opMargin = ratios.operatingProfitMarginTTM || null;
+            stock.grossMargin = ratios.grossProfitMarginTTM || null;
+            stock.roe = ratios.returnOnEquityTTM || null;
+            stock.roa = ratios.returnOnAssetsTTM || null;
+            stock.debtEquity = ratios.debtEquityRatioTTM || null;
+            stock.currentRatio = ratios.currentRatioTTM || null;
+            stock.fcf = ratios.freeCashFlowPerShareTTM || null;
+            stock.divYield = ratios.dividendYielTTM || ratios.dividendYieldTTM || stock.divYield;
+            stock.payoutRatio = ratios.payoutRatioTTM || null;
+        }
+
+        console.log(`[Investor] Enriched ${stock.ticker} with FMP fundamentals (P/E: ${stock.pe}, ROE: ${stock.roe})`);
     } catch (err) {
-        console.log(`[Investor] Fundamentals unavailable for ${stock.ticker}: ${err.message}`);
+        console.log(`[Investor] FMP enrichment failed for ${stock.ticker}: ${err.message}`);
     }
+
     return stock;
 }
+
 
 // ── Helpers ─────────────────────────────────────────────────
 function sma(d, p) { if (d.length < p) return null; return d.slice(-p).reduce((s, v) => s + v, 0) / p; }
