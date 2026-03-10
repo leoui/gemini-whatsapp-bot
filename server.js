@@ -80,15 +80,32 @@ async function handleIncomingMessage(msg) {
     if (autoReply === false) return;
 
     // --- Group handling ---
-    if (msg.isGroup) {
-        const mentionOnly = Config.get('groupMentionOnly');
-        if (mentionOnly && !msg.isMentioned) {
-            // Check trigger word
-            const triggerWord = Config.get('groupTriggerWord');
-            if (!triggerWord || !msg.text?.toLowerCase().includes(triggerWord.toLowerCase())) {
-                return;
-            }
+    if (msg.isGroup && Config.get('groupMentionOnly')) {
+        const triggerWord = (Config.get('groupTriggerWord') || 'bot').toLowerCase();
+        const msgText = (msg.text || '').toLowerCase().trim();
+
+        // Check if message STARTS with trigger word (e.g. "cuy hello" or "cuy, help me")
+        const triggeredByKeyword = msgText.startsWith(triggerWord + ',') ||
+            msgText.startsWith(triggerWord + ' ') ||
+            msgText.startsWith(triggerWord + ':') ||
+            msgText === triggerWord;
+
+        if (!msg.isMentioned && !triggeredByKeyword) {
+            log('info', `[Bot] Group message ignored (not mentioned, no trigger word): "${(msg.text || '').substring(0, 40)}"`);
+            return;
         }
+
+        // Strip the trigger word from the beginning of the message
+        if (triggeredByKeyword && msg.text) {
+            msg.text = msg.text.replace(new RegExp(`^${triggerWord}[,:\\s]*`, 'i'), '').trim();
+        }
+
+        // Strip @mention tag from message text if present
+        if (msg.isMentioned && msg.text) {
+            msg.text = msg.text.replace(/@\d+/g, '').trim();
+        }
+
+        log('info', `[Bot] Group message accepted (mentioned=${msg.isMentioned}, triggered=${triggeredByKeyword})`);
     }
 
     // --- Allowed / Blocked contacts ---
@@ -443,6 +460,39 @@ async function handleIncomingMessage(msg) {
                 await whatsapp.sendMessage(msg.remoteJid, `⚠️ Sorry, I couldn't create the file: ${err.message}`);
             }
             return;
+        }
+
+        // --- Handle [IMAGE_GEN: prompt] tag in AI response ---
+        const imageGenTagMatch = responseResult.text?.match(/\[IMAGE_GEN:\s*([^\]]+)\]/);
+        if (imageGenTagMatch) {
+            const imagePrompt = imageGenTagMatch[1].trim();
+            const cleanText = responseResult.text.replace(/\[IMAGE_GEN:[^\]]+\]/g, '').trim();
+
+            log('info', `[Bot] AI requested image generation: "${imagePrompt}"`);
+
+            try {
+                const imageResult = await gemini.generateImage(chatId, imagePrompt);
+
+                if (imageResult?.imagePath) {
+                    await whatsapp.markRead(msg.key);
+                    await whatsapp.setPresence(msg.remoteJid, 'composing');
+                    await new Promise(r => setTimeout(r, 1500));
+
+                    await whatsapp.sendFile(msg.remoteJid, imageResult.imagePath, {
+                        caption: cleanText || '📸',
+                        mimetype: imageResult.mimeType || 'image/png',
+                    });
+
+                    await whatsapp.setPresence(msg.remoteJid, 'paused');
+                    log('info', `[Bot] 🎨 Sent generated image: "${imagePrompt}"`);
+                    return;
+                } else {
+                    responseResult.text = cleanText || '⚠️ Image generation failed, please try again.';
+                }
+            } catch (imgErr) {
+                log('error', `[Bot] IMAGE_GEN failed: ${imgErr.message}`);
+                responseResult.text = cleanText || '⚠️ Image generation failed, please try again.';
+            }
         }
 
         // --- Handle [REMINDER:time:message] tag ---
