@@ -1,27 +1,20 @@
 'use strict';
 /**
- * Investment Analysis Service
- * Provides AI-powered stock analysis using Yahoo Finance data
- * and Claude AI or Gemini for fundamental + scalping analysis.
- *
- * Usage via WhatsApp:
- *   /cl analyze BBRI   → Claude AI analysis
- *   /gm analyze AAPL   → Gemini analysis
+ * Investment Analysis Service v2
+ * Uses Yahoo Finance chart API (no crumb, works everywhere including EU VPS)
+ * as primary data source, with optional crumb-based quoteSummary for
+ * enriched fundamental data when available.
  */
 
 const https = require('https');
 const Config = require('./config');
 
-// ── Yahoo Finance Crumb Auth ────────────────────────────────
-let _cookies = '';
-let _crumb = '';
-let _crumbExpiry = 0;
-
+// ── HTTP helper ─────────────────────────────────────────────
 function httpGet(url, headers = {}) {
     return new Promise((resolve, reject) => {
         const opts = {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 ...headers,
             },
             timeout: 15000,
@@ -38,84 +31,165 @@ function httpGet(url, headers = {}) {
     });
 }
 
-async function ensureCrumb() {
-    if (_crumb && Date.now() < _crumbExpiry) return;
-    const cookieResp = await httpGet('https://fc.yahoo.com/');
-    _cookies = cookieResp.cookies.map(c => c.split(';')[0]).join('; ');
-    const crumbResp = await httpGet('https://query2.finance.yahoo.com/v1/test/getcrumb', { Cookie: _cookies });
-    _crumb = crumbResp.data.trim();
-    _crumbExpiry = Date.now() + 3600000; // 1 hour
-    console.log(`[Investor] Yahoo Finance crumb refreshed`);
+// ── Yahoo Finance Crumb (optional, may fail on EU VPS) ──────
+let _cookies = '', _crumb = '', _crumbExpiry = 0, _crumbFailed = false;
+
+async function tryGetCrumb() {
+    if (_crumbFailed) return false;
+    if (_crumb && Date.now() < _crumbExpiry) return true;
+    try {
+        const cookieResp = await httpGet('https://fc.yahoo.com/');
+        _cookies = cookieResp.cookies.map(c => c.split(';')[0]).join('; ');
+        const crumbResp = await httpGet('https://query2.finance.yahoo.com/v1/test/getcrumb', { Cookie: _cookies });
+        const crumb = crumbResp.data.trim();
+        if (crumb.includes('error') || crumb.includes('{')) {
+            _crumbFailed = true;
+            console.log('[Investor] Crumb auth unavailable (EU/blocked IP). Using chart-only mode.');
+            return false;
+        }
+        _crumb = crumb;
+        _crumbExpiry = Date.now() + 3600000;
+        console.log('[Investor] Crumb refreshed');
+        return true;
+    } catch {
+        _crumbFailed = true;
+        console.log('[Investor] Crumb auth failed. Using chart-only mode.');
+        return false;
+    }
 }
 
-async function yahooJSON(url) {
-    await ensureCrumb();
-    const sep = url.includes('?') ? '&' : '?';
-    const resp = await httpGet(url + sep + `crumb=${encodeURIComponent(_crumb)}`, { Cookie: _cookies });
-    return JSON.parse(resp.data);
-}
+// ── Primary: Chart API (works everywhere, no crumb) ─────────
+async function fetchChartData(ticker) {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=3mo&interval=1d&includePrePost=false`;
+    const resp = await httpGet(url);
+    const json = JSON.parse(resp.data);
+    const result = json.chart?.result?.[0];
+    if (!result) {
+        const err = json.chart?.error?.description || 'Ticker not found';
+        throw new Error(`Yahoo Finance: ${err} (${ticker})`);
+    }
 
-// ── Data Fetchers ───────────────────────────────────────────
-async function fetchStockData(ticker) {
-    const modules = 'price,summaryDetail,defaultKeyStatistics,financialData';
-    const resp = await yahooJSON(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}`);
-    const r = resp.quoteSummary?.result?.[0];
-    if (!r) throw new Error(`No data found for ticker "${ticker}"`);
-
-    const p = r.price || {}, s = r.summaryDetail || {}, k = r.defaultKeyStatistics || {}, f = r.financialData || {};
-    const raw = (o) => o?.raw ?? null;
-
-    return {
-        ticker, name: p.longName || p.shortName || ticker,
-        exchange: p.exchangeName || '?', currency: p.currency || 'USD',
-        currentPrice: raw(p.regularMarketPrice), previousClose: raw(p.regularMarketPreviousClose),
-        dayHigh: raw(p.regularMarketDayHigh), dayLow: raw(p.regularMarketDayLow),
-        volume: raw(p.regularMarketVolume), avgVolume: raw(s.averageVolume),
-        marketCap: raw(p.marketCap),
-        w52High: raw(s.fiftyTwoWeekHigh), w52Low: raw(s.fiftyTwoWeekLow),
-        pe: raw(s.trailingPE) || raw(k.trailingPE), forwardPE: raw(s.forwardPE) || raw(k.forwardPE),
-        pb: raw(k.priceToBook), ps: raw(k.priceToSalesTrailing12Months),
-        peg: raw(k.pegRatio), evEbitda: raw(k.enterpriseToEbitda), evRevenue: raw(k.enterpriseToRevenue),
-        profitMargin: raw(f.profitMargins), opMargin: raw(f.operatingMargins), grossMargin: raw(f.grossMargins),
-        roe: raw(f.returnOnEquity), roa: raw(f.returnOnAssets),
-        revGrowth: raw(f.revenueGrowth), earnGrowth: raw(f.earningsGrowth),
-        qtrEarnGrowth: raw(k.earningsQuarterlyGrowth),
-        debtEquity: raw(f.debtToEquity), currentRatio: raw(f.currentRatio),
-        totalDebt: raw(f.totalDebt), totalCash: raw(f.totalCash),
-        fcf: raw(f.freeCashflow), opCF: raw(f.operatingCashflow),
-        divYield: raw(s.dividendYield), payoutRatio: raw(s.payoutRatio),
-        eps: raw(k.trailingEps), fwdEps: raw(k.forwardEps), beta: raw(k.beta) || raw(s.beta),
-        targetLow: raw(f.targetLowPrice), targetMean: raw(f.targetMeanPrice), targetHigh: raw(f.targetHighPrice),
-        recKey: f.recommendationKey, recMean: raw(f.recommendationMean),
-        numAnalysts: raw(f.numberOfAnalystOpinions),
-    };
-}
-
-async function fetchTechnicals(ticker) {
-    const resp = await yahooJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=3mo&interval=1d`);
-    const r = resp.chart?.result?.[0];
-    if (!r) return null;
-    const ts = r.timestamp || [], q = r.indicators?.quote?.[0] || {};
+    const meta = result.meta || {};
+    const ts = result.timestamp || [];
+    const q = result.indicators?.quote?.[0] || {};
     const prices = ts.map((t, i) => ({
         d: new Date(t * 1000).toISOString().split('T')[0],
         o: q.open?.[i], h: q.high?.[i], l: q.low?.[i], c: q.close?.[i], v: q.volume?.[i],
     })).filter(p => p.c != null);
 
     const closes = prices.map(p => p.c);
-    const s20 = sma(closes, 20), s50 = sma(closes, 50), r14 = rsi(closes, 14);
+    const volumes = prices.map(p => p.v || 0);
     const last = prices[prices.length - 1];
-    const lows = prices.slice(-20).map(p => p.l).filter(Boolean).sort((a, b) => a - b);
-    const highs = prices.slice(-20).map(p => p.h).filter(Boolean).sort((a, b) => b - a);
+    const s20 = sma(closes, 20), s50 = sma(closes, 50), r14 = rsi(closes, 14);
+    const lows20 = prices.slice(-20).map(p => p.l).filter(Boolean).sort((a, b) => a - b);
+    const highs20 = prices.slice(-20).map(p => p.h).filter(Boolean).sort((a, b) => b - a);
+    const avgVol = volumes.slice(-20).reduce((s, v) => s + v, 0) / Math.min(20, volumes.length);
+
+    // Price performance calculations
+    const priceNow = meta.regularMarketPrice || last?.c;
+    const price1m = closes.length > 21 ? closes[closes.length - 22] : null;
+    const price3m = closes[0] || null;
 
     return {
-        last5: prices.slice(-5),
+        // Stock identity
+        ticker: meta.symbol || ticker,
+        name: meta.longName || meta.shortName || ticker,
+        exchange: meta.exchangeName || meta.fullExchangeName || '?',
+        currency: meta.currency || 'USD',
+
+        // Current price data from meta
+        currentPrice: priceNow,
+        previousClose: meta.chartPreviousClose || meta.previousClose,
+        dayHigh: meta.regularMarketDayHigh,
+        dayLow: meta.regularMarketDayLow,
+        volume: meta.regularMarketVolume,
+        avgVolume: Math.round(avgVol),
+        w52High: meta.fiftyTwoWeekHigh,
+        w52Low: meta.fiftyTwoWeekLow,
+
+        // Performance
+        change1m: price1m ? ((priceNow - price1m) / price1m * 100).toFixed(2) + '%' : 'N/A',
+        change3m: price3m ? ((priceNow - price3m) / price3m * 100).toFixed(2) + '%' : 'N/A',
+        distFrom52High: meta.fiftyTwoWeekHigh ? ((priceNow - meta.fiftyTwoWeekHigh) / meta.fiftyTwoWeekHigh * 100).toFixed(1) + '%' : 'N/A',
+        distFrom52Low: meta.fiftyTwoWeekLow ? ((priceNow - meta.fiftyTwoWeekLow) / meta.fiftyTwoWeekLow * 100).toFixed(1) + '%' : 'N/A',
+
+        // Technicals
         sma20: s20?.toFixed(2), sma50: s50?.toFixed(2), rsi14: r14?.toFixed(1),
-        support: lows[0]?.toFixed(2), resistance: highs[0]?.toFixed(2),
-        vsSMA20: s20 ? (((last.c - s20) / s20) * 100).toFixed(2) : null,
-        vsSMA50: s50 ? (((last.c - s50) / s50) * 100).toFixed(2) : null,
+        support: lows20[0]?.toFixed(2), resistance: highs20[0]?.toFixed(2),
+        vsSMA20: s20 ? ((priceNow - s20) / s20 * 100).toFixed(2) : null,
+        vsSMA50: s50 ? ((priceNow - s50) / s50 * 100).toFixed(2) : null,
+        last5: prices.slice(-5),
+
+        // Fundamental placeholders (filled by quoteSummary if available)
+        pe: null, forwardPE: null, pb: null, ps: null, peg: null,
+        evEbitda: null, profitMargin: null, opMargin: null, grossMargin: null,
+        roe: null, roa: null, revGrowth: null, earnGrowth: null,
+        debtEquity: null, currentRatio: null, totalCash: null, totalDebt: null,
+        fcf: null, opCF: null, divYield: null, payoutRatio: null,
+        eps: null, fwdEps: null, beta: null, marketCap: null,
+        targetLow: null, targetMean: null, targetHigh: null,
+        recKey: null, recMean: null, numAnalysts: null,
     };
 }
 
+// ── Optional: QuoteSummary enrichment (needs crumb) ─────────
+async function enrichWithFundamentals(stock) {
+    const hasCrumb = await tryGetCrumb();
+    if (!hasCrumb) return stock;
+
+    try {
+        const modules = 'price,summaryDetail,defaultKeyStatistics,financialData';
+        const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(stock.ticker)}?modules=${modules}&crumb=${encodeURIComponent(_crumb)}`;
+        const resp = await httpGet(url, { Cookie: _cookies });
+        const json = JSON.parse(resp.data);
+        const r = json.quoteSummary?.result?.[0];
+        if (!r) return stock;
+
+        const s = r.summaryDetail || {}, k = r.defaultKeyStatistics || {}, f = r.financialData || {}, p = r.price || {};
+        const raw = (o) => o?.raw ?? null;
+
+        // Enrich stock with fundamental data
+        stock.name = p.longName || p.shortName || stock.name;
+        stock.marketCap = raw(p.marketCap) || stock.marketCap;
+        stock.pe = raw(s.trailingPE) || raw(k.trailingPE);
+        stock.forwardPE = raw(s.forwardPE) || raw(k.forwardPE);
+        stock.pb = raw(k.priceToBook);
+        stock.ps = raw(k.priceToSalesTrailing12Months);
+        stock.peg = raw(k.pegRatio);
+        stock.evEbitda = raw(k.enterpriseToEbitda);
+        stock.profitMargin = raw(f.profitMargins);
+        stock.opMargin = raw(f.operatingMargins);
+        stock.grossMargin = raw(f.grossMargins);
+        stock.roe = raw(f.returnOnEquity);
+        stock.roa = raw(f.returnOnAssets);
+        stock.revGrowth = raw(f.revenueGrowth);
+        stock.earnGrowth = raw(f.earningsGrowth);
+        stock.debtEquity = raw(f.debtToEquity);
+        stock.currentRatio = raw(f.currentRatio);
+        stock.totalCash = raw(f.totalCash);
+        stock.totalDebt = raw(f.totalDebt);
+        stock.fcf = raw(f.freeCashflow);
+        stock.opCF = raw(f.operatingCashflow);
+        stock.divYield = raw(s.dividendYield);
+        stock.payoutRatio = raw(s.payoutRatio);
+        stock.eps = raw(k.trailingEps);
+        stock.fwdEps = raw(k.forwardEps);
+        stock.beta = raw(k.beta) || raw(s.beta);
+        stock.targetLow = raw(f.targetLowPrice);
+        stock.targetMean = raw(f.targetMeanPrice);
+        stock.targetHigh = raw(f.targetHighPrice);
+        stock.recKey = f.recommendationKey;
+        stock.recMean = raw(f.recommendationMean);
+        stock.numAnalysts = raw(f.numberOfAnalystOpinions);
+
+        console.log(`[Investor] Enriched ${stock.ticker} with fundamental data`);
+    } catch (err) {
+        console.log(`[Investor] Fundamentals unavailable for ${stock.ticker}: ${err.message}`);
+    }
+    return stock;
+}
+
+// ── Helpers ─────────────────────────────────────────────────
 function sma(d, p) { if (d.length < p) return null; return d.slice(-p).reduce((s, v) => s + v, 0) / p; }
 function rsi(d, p) {
     if (d.length < p + 1) return null;
@@ -124,55 +198,62 @@ function rsi(d, p) {
     if (l === 0) return 100;
     return 100 - (100 / (1 + (g / p) / (l / p)));
 }
-
-// ── Format helpers ──────────────────────────────────────────
 function pct(n) { return n != null ? (n * 100).toFixed(1) + '%' : 'N/A'; }
 function cap(n) { if (!n) return 'N/A'; if (n >= 1e12) return (n / 1e12).toFixed(2) + 'T'; if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B'; if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M'; return n.toLocaleString(); }
 
 // ── Build Analysis Prompt ───────────────────────────────────
-function buildPrompt(stock, tech, query) {
+function buildPrompt(stock, query) {
     const now = new Date();
     const dateStr = now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta', dateStyle: 'full', timeStyle: 'short' });
     const isoDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
 
+    const hasFundamentals = stock.pe != null || stock.roe != null || stock.profitMargin != null;
+
     return `You are an expert investment analyst specializing in fundamental analysis, value investing, and scalping techniques. You provide data-driven, grounded recommendations — NO hallucination, NO assumptions.
 
 **CRITICAL RULES:**
-1. Today is: ${dateStr} (${isoDate}). Use this exact date. Do NOT hallucinate dates.
-2. ONLY use the data below. Do NOT invent numbers.
-3. All analysis must reference actual data points provided.
+1. Today is: ${dateStr} (${isoDate}). Use ONLY this date.
+2. ONLY use the data provided below. Do NOT invent or estimate any numbers.
+3. All analysis must cite actual data points.
+${!hasFundamentals ? '4. Fundamental ratios (P/E, P/B etc.) are NOT available. Focus your analysis on PRICE ACTION, TECHNICALS, and PERFORMANCE data.' : ''}
 
 **STOCK: ${stock.name} (${stock.ticker})**
 Exchange: ${stock.exchange} | Currency: ${stock.currency}
 
-PRICE: Current=${stock.currentPrice} | PrevClose=${stock.previousClose} | DayRange=${stock.dayLow}-${stock.dayHigh}
-52W: ${stock.w52Low}-${stock.w52High} | Vol=${stock.volume?.toLocaleString()} | AvgVol=${stock.avgVolume?.toLocaleString()} | MCap=${cap(stock.marketCap)}
+PRICE DATA:
+Current=${stock.currentPrice} | PrevClose=${stock.previousClose}
+DayRange=${stock.dayLow || '?'}-${stock.dayHigh || '?'}
+52W Range: ${stock.w52Low}-${stock.w52High}
+Volume=${stock.volume?.toLocaleString() || 'N/A'} | AvgVol20d=${stock.avgVolume?.toLocaleString() || 'N/A'}
+${stock.marketCap ? `MarketCap=${cap(stock.marketCap)}` : ''}
 
-VALUATION: P/E=${stock.pe || 'N/A'} | FwdP/E=${stock.forwardPE || 'N/A'} | P/B=${stock.pb || 'N/A'} | P/S=${stock.ps || 'N/A'} | PEG=${stock.peg || 'N/A'} | EV/EBITDA=${stock.evEbitda || 'N/A'}
+PERFORMANCE:
+1-Month: ${stock.change1m} | 3-Month: ${stock.change3m}
+Distance from 52W High: ${stock.distFrom52High} | from 52W Low: ${stock.distFrom52Low}
+
+TECHNICALS (3-month daily):
+SMA20=${stock.sma20} (${stock.vsSMA20}% vs price) | SMA50=${stock.sma50} (${stock.vsSMA50}%)
+RSI14=${stock.rsi14} | Support=${stock.support} | Resistance=${stock.resistance}
+Last 5 days: ${stock.last5?.map(d => `${d.d}:O${d.o?.toFixed(2)} H${d.h?.toFixed(2)} L${d.l?.toFixed(2)} C${d.c?.toFixed(2)} V${d.v?.toLocaleString()}`).join('\n')}
+
+${hasFundamentals ? `VALUATION: P/E=${stock.pe || 'N/A'} | FwdP/E=${stock.forwardPE || 'N/A'} | P/B=${stock.pb || 'N/A'} | P/S=${stock.ps || 'N/A'} | PEG=${stock.peg || 'N/A'} | EV/EBITDA=${stock.evEbitda || 'N/A'}
 
 PROFITABILITY: ProfitMargin=${pct(stock.profitMargin)} | OpMargin=${pct(stock.opMargin)} | GrossMargin=${pct(stock.grossMargin)} | ROE=${pct(stock.roe)} | ROA=${pct(stock.roa)}
 
-GROWTH: RevGrowth=${pct(stock.revGrowth)} | EarningsGrowth=${pct(stock.earnGrowth)} | QtrlyGrowth=${pct(stock.qtrEarnGrowth)}
+GROWTH: RevGrowth=${pct(stock.revGrowth)} | EarningsGrowth=${pct(stock.earnGrowth)}
 
 BALANCE SHEET: D/E=${stock.debtEquity || 'N/A'} | CurrentRatio=${stock.currentRatio || 'N/A'} | Cash=${cap(stock.totalCash)} | Debt=${cap(stock.totalDebt)} | FCF=${cap(stock.fcf)} | OpCF=${cap(stock.opCF)}
 
 DIVIDENDS: Yield=${pct(stock.divYield)} | PayoutRatio=${pct(stock.payoutRatio)}
 EARNINGS: EPS=${stock.eps || 'N/A'} | FwdEPS=${stock.fwdEps || 'N/A'} | Beta=${stock.beta || 'N/A'}
-ANALYST: Target=${stock.targetLow || '?'}-${stock.targetMean || '?'}-${stock.targetHigh || '?'} | Rec=${stock.recKey || 'N/A'} (${stock.recMean || 'N/A'}) | #Analysts=${stock.numAnalysts || 'N/A'}
-
-${tech ? `TECHNICALS (3mo daily):
-SMA20=${tech.sma20} (${tech.vsSMA20}% vs price) | SMA50=${tech.sma50} (${tech.vsSMA50}%)
-RSI14=${tech.rsi14} | Support=${tech.support} | Resistance=${tech.resistance}
-Last 5d: ${tech.last5?.map(d => `${d.d}:C${d.c?.toFixed(2)}`).join(' | ')}` : ''}
+ANALYST: Target=${stock.targetLow || '?'}-${stock.targetMean || '?'}-${stock.targetHigh || '?'} | Rec=${stock.recKey || 'N/A'} (${stock.recMean || 'N/A'}) | #Analysts=${stock.numAnalysts || 'N/A'}` : 'FUNDAMENTAL DATA: Not available from data source. Analyze based on price action and technicals only.'}
 
 USER QUERY: "${query}"
 
 Respond with:
 📊 **${stock.ticker} — Quick Summary** (one line)
-💰 **Valuation Analysis** (undervalued/overvalued? cite actual P/E, P/B, PEG)
-📈 **Growth Assessment** (cite actual growth numbers)
-🏦 **Fundamental Health** (cite actual D/E, cash, FCF)
-⚡ **Scalping Analysis** (S/R levels, RSI, momentum, entry zones)
+${hasFundamentals ? '💰 **Valuation Analysis** (cite actual P/E, P/B, PEG)\n📈 **Growth Assessment** (cite actual growth numbers)\n🏦 **Fundamental Health** (cite actual D/E, cash, FCF)' : '📈 **Price Action Analysis** (cite 1M/3M performance, 52W range position)'}
+⚡ **Scalping Analysis** (S/R levels, RSI reading, momentum, entry zones)
 🎯 **Signal: 🟢 BUY / 🟡 HOLD / 🔴 SELL** (Confidence X%) with 2-3 bullet rationale
 📋 **Trading Plan** (Entry, Stop-Loss, TP1, TP2, Position sizing)
 ⚠️ **Risk Factors** (top 3)
@@ -197,7 +278,7 @@ async function analyzeWithGemini(prompt) {
 
 async function analyzeWithClaude(prompt) {
     const apiKey = Config.get('claudeApiKey') || process.env.CLAUDE_API_KEY;
-    if (!apiKey) throw new Error('No Claude API key configured. Set CLAUDE_API_KEY env var or configure in Bot Manager.');
+    if (!apiKey) throw new Error('No Claude API key configured. Set CLAUDE_API_KEY env var.');
 
     const postData = JSON.stringify({
         model: 'claude-sonnet-4-20250514',
@@ -237,38 +318,23 @@ async function analyzeWithClaude(prompt) {
 }
 
 // ── Public API ──────────────────────────────────────────────
-
-/**
- * Analyze a stock using the specified AI model.
- * @param {string} ticker — e.g. 'AAPL', 'BBRI.JK'
- * @param {string} query — user's full query text
- * @param {'gemini'|'claude'} model — which AI engine to use
- * @returns {Promise<string>} — formatted analysis report
- */
 async function analyze(ticker, query, model = 'gemini') {
-    console.log(`[Investor] Analyzing ${ticker} with ${model}...`);
-
-    // Normalize ticker
     const t = ticker.toUpperCase().trim();
+    console.log(`[Investor] Analyzing ${t} with ${model}...`);
 
-    // Fetch real data
-    const [stockData, techData] = await Promise.all([
-        fetchStockData(t),
-        fetchTechnicals(t).catch(() => null),
-    ]);
+    // 1. Fetch chart data (always works, no crumb needed)
+    let stock = await fetchChartData(t);
 
-    // Build prompt
-    const prompt = buildPrompt(stockData, techData, query);
+    // 2. Try to enrich with fundamentals (needs crumb, may fail on EU VPS)
+    stock = await enrichWithFundamentals(stock);
 
-    // Run AI analysis
-    let analysis;
-    if (model === 'claude') {
-        analysis = await analyzeWithClaude(prompt);
-    } else {
-        analysis = await analyzeWithGemini(prompt);
-    }
+    // 3. Build prompt and run AI
+    const prompt = buildPrompt(stock, query);
+    const analysis = model === 'claude'
+        ? await analyzeWithClaude(prompt)
+        : await analyzeWithGemini(prompt);
 
     return analysis;
 }
 
-module.exports = { analyze, fetchStockData, fetchTechnicals };
+module.exports = { analyze, fetchChartData, enrichWithFundamentals };
