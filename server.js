@@ -162,9 +162,25 @@ async function handleIncomingMessage(msg) {
             const query = (clMatch || gmMatch)[1].trim();
             log('info', `[Investor] /${clMatch ? 'cl' : 'gm'} request: "${query}"`);
 
-            // Extract ticker from query — look for stock-like patterns
-            const tickerMatch = query.match(/\b([A-Z]{1,5}(?:\.JK)?)\b/i);
-            const ticker = tickerMatch ? tickerMatch[1].toUpperCase() : null;
+            // Extract ticker from query — try to find actual stock symbols, ignore regular words
+            let ticker = null;
+            const words = query.split(/[\s,;:\-?]+/);
+            // 1. Look for explicit .JK
+            for (const w of words) {
+                if (w.toUpperCase().endsWith('.JK')) { ticker = w.toUpperCase(); break; }
+            }
+            // 2. Look for fully uppercase words (1-5 chars)
+            if (!ticker) {
+                for (const w of words) {
+                    if (w === w.toUpperCase() && /^[A-Z]{1,5}$/.test(w)) { ticker = w; break; }
+                }
+            }
+            // 3. Fallback: last short word
+            if (!ticker) {
+                for (let i = words.length - 1; i >= 0; i--) {
+                    if (/^[a-zA-Z]{1,5}$/.test(words[i])) { ticker = words[i].toUpperCase(); break; }
+                }
+            }
 
             try {
                 await whatsapp.markRead(msg.key);

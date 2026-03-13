@@ -532,11 +532,17 @@ When the user asks to send a FILE to someone else, use BOTH tags together.
         if (result.error) return result;
 
         try {
-            let jsonStr = result.text.trim().replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+            // Find the JSON object block to ignore any surrounding text or tags
+            const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error('No JSON object found in response');
+
+            let jsonStr = jsonMatch[0].replace(/```json?\n?/g, '').replace(/```/g, '').trim();
             const data = JSON.parse(jsonStr);
             return { data, caption: data.caption || `📎 Generated ${ext.replace('.', '').toUpperCase()} file` };
         } catch (err) {
             console.error('[Gemini] Failed to parse structured file JSON:', err.message);
+            // Include a chunk of the text in log for debugging
+            console.error('[Gemini] Raw text was:', result.text.substring(0, 150));
             return { text: '⚠️ Failed to generate the file. AI returned invalid data. Please try again.', error: true };
         }
     }
