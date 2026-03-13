@@ -365,6 +365,14 @@ USER QUERY: "${query}"
 **INSTRUCTIONS:**
 If the user's query asks specific questions (e.g., about dividends, corporate actions, specific strategies), answer their questions directly, thoroughly, and conversationally. You do NOT have to follow the rigid format below if it interrupts the flow of your answer.
 
+**DIVIDEND TRAP SIMULATION & HIT AND RUN:**
+If the user asks about a dividend strategy, "hit & run", or dividend eligibility (e.g., "when to buy to get dividend", "how to avoid dividend trap"):
+1. **Eligibility:** Clearly state they must buy ON or BEFORE the **Cum Date** and hold until the **Ex Date** market open.
+2. **The Trap:** Explain the "Dividend Trap" — stock prices typically drop by the dividend amount (or more) on the Ex Date.
+3. **Hit & Run Profitability:** Simulate whether the dividend yield is historically large enough to cover the expected Ex Date capital loss and trading fees.
+4. **Capital / Risk Sizing:** Recommend exactly what % of their portfolio/capital to use, keeping risk low (e.g., "Use max 10-15% of trading capital to avoid being trapped with a huge unrealized loss").
+5. **Exit Strategy:** Advise exactly when to sell (e.g., "Sell at open on Ex Date if gap down is less than dividend, or hold for rebound if it drops too low").
+
 Otherwise, for general analysis, please respond with:
 📊 **${stock.ticker} — Quick Summary** (one line)
 ${hasFundamentals ? '💰 **Valuation Analysis** (cite actual P/E, P/B, PEG)\n📈 **Growth Assessment** (cite actual growth numbers)\n🏦 **Fundamental Health** (cite actual D/E, cash, FCF)' : '📈 **Price Action Analysis** (cite 1M/3M performance, 52W range position)'}
