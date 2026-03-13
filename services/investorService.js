@@ -475,10 +475,9 @@ async function analyze(ticker, query, model = 'gemini') {
         const startBal = getStartingBalance();
         const remaining = startBal > 0 ? Math.max(0, startBal - totalSpent) : null;
 
-        let footer = `\n\n---\nCredit used for this analysis:\n*$${cost.toFixed(2)}* (${(tokens.input_tokens || 0).toLocaleString()} input + ${(tokens.output_tokens || 0).toLocaleString()} output tokens)`;
-        footer += `\n\nTotal spent: *$${totalSpent.toFixed(2)}*`;
+        let footer = `\n\n---\nCredit used for this analysis:\n*$${cost.toFixed(2)}*`;
         if (remaining !== null) {
-            footer += `\nClaude Remaining Balance: *~$${remaining.toFixed(2)}*`;
+            footer += `\n\nClaude Remaining Balance: *$${remaining.toFixed(2)}*`;
         }
         creditFooter = footer;
     } else {
@@ -501,10 +500,9 @@ async function generalChat(query, model = 'gemini') {
         const startBal = getStartingBalance();
         const remaining = startBal > 0 ? Math.max(0, startBal - totalSpent) : null;
 
-        let footer = `\n\n---\nCredit used for this reply:\n*$${cost.toFixed(2)}* (${(tokens.input_tokens || 0).toLocaleString()} input + ${(tokens.output_tokens || 0).toLocaleString()} output tokens)`;
-        footer += `\n\nTotal spent: *$${totalSpent.toFixed(2)}*`;
+        let footer = `\n\n---\nCredit used for this reply:\n*$${cost.toFixed(2)}*`;
         if (remaining !== null) {
-            footer += `\nClaude Remaining Balance: *~$${remaining.toFixed(2)}*`;
+            footer += `\n\nClaude Remaining Balance: *$${remaining.toFixed(2)}*`;
         }
         creditFooter = footer;
     } else {
