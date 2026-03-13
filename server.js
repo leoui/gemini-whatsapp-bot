@@ -190,7 +190,7 @@ async function handleIncomingMessage(msg) {
                 if (ticker) {
                     analysis = await InvestorService.analyze(ticker, query, model);
                 } else {
-                    analysis = `⚠️ Could not detect a stock ticker in your query.\n\nUsage examples:\n• /cl analyze BBRI.JK\n• /gm is AAPL undervalued?\n• /cl trading plan NVDA scalping\n• /gm compare BBCA.JK vs BMRI.JK`;
+                    analysis = await InvestorService.generalChat(query, model);
                 }
 
                 // Split long messages (WhatsApp limit ~4096 chars)

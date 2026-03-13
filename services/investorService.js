@@ -362,7 +362,10 @@ Volume Pattern (5d):\n${stock.bandar.volBars}` : ''}
 
 USER QUERY: "${query}"
 
-Respond with:
+**INSTRUCTIONS:**
+If the user's query asks specific questions (e.g., about dividends, corporate actions, specific strategies), answer their questions directly, thoroughly, and conversationally. You do NOT have to follow the rigid format below if it interrupts the flow of your answer.
+
+Otherwise, for general analysis, please respond with:
 📊 **${stock.ticker} — Quick Summary** (one line)
 ${hasFundamentals ? '💰 **Valuation Analysis** (cite actual P/E, P/B, PEG)\n📈 **Growth Assessment** (cite actual growth numbers)\n🏦 **Fundamental Health** (cite actual D/E, cash, FCF)' : '📈 **Price Action Analysis** (cite 1M/3M performance, 52W range position)'}
 🕵️ **Bandar Analysis** (OBV trend, smart money signals, whale activity, bandar score — cite the data above)
@@ -485,4 +488,30 @@ async function analyze(ticker, query, model = 'gemini') {
     return analysis + creditFooter;
 }
 
-module.exports = { analyze, fetchChartData, enrichWithFundamentals, computeBandarmology };
+async function generalChat(query, model = 'gemini') {
+    console.log(`[Investor] General Chat with ${model}...`);
+    let analysis, creditFooter = '';
+
+    if (model === 'claude') {
+        const result = await analyzeWithClaude(query);
+        analysis = result.text;
+        const cost = result.cost || 0;
+        const totalSpent = result.totalSpent || 0;
+        const tokens = result.usage || {};
+        const startBal = getStartingBalance();
+        const remaining = startBal > 0 ? Math.max(0, startBal - totalSpent) : null;
+
+        let footer = `\n\n---\nCredit used for this reply:\n*$${cost.toFixed(2)}* (${(tokens.input_tokens || 0).toLocaleString()} input + ${(tokens.output_tokens || 0).toLocaleString()} output tokens)`;
+        footer += `\n\nTotal spent: *$${totalSpent.toFixed(2)}*`;
+        if (remaining !== null) {
+            footer += `\nClaude Remaining Balance: *~$${remaining.toFixed(2)}*`;
+        }
+        creditFooter = footer;
+    } else {
+        analysis = await analyzeWithGemini(query);
+    }
+
+    return analysis + creditFooter;
+}
+
+module.exports = { analyze, generalChat, fetchChartData, enrichWithFundamentals, computeBandarmology };
